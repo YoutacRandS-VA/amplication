@@ -1,8 +1,7 @@
 import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { Resource } from "@opentelemetry/resources";
 import { SemanticResourceAttributes } from "@opentelemetry/semantic-conventions";
-import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
-import { registerInstrumentations } from "@opentelemetry/instrumentation";
+import { NodeSDK } from "@opentelemetry/sdk-node";
 import { HttpInstrumentation } from "@opentelemetry/instrumentation-http";
 import { FsInstrumentation } from "@opentelemetry/instrumentation-fs";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-grpc";
@@ -10,7 +9,18 @@ import { SpanStatusCode, trace } from "@opentelemetry/api";
 
 export class Tracing {
   static init() {
-    registerInstrumentations({
+    const resource = Resource.default().merge(
+      new Resource({
+        [SemanticResourceAttributes.SERVICE_NAME]: "data-service-generator",
+      })
+    );
+
+    const traceExporter = new OTLPTraceExporter();
+
+    const sdk = new NodeSDK({
+      resource,
+      spanProcessor: new BatchSpanProcessor(traceExporter),
+      traceExporter: traceExporter,
       instrumentations: [
         new HttpInstrumentation({
           requireParentforIncomingSpans: true,
@@ -21,20 +31,7 @@ export class Tracing {
       ],
     });
 
-    const resource = Resource.default().merge(
-      new Resource({
-        [SemanticResourceAttributes.SERVICE_NAME]: "data-service-generator",
-      })
-    );
-
-    const provider = new NodeTracerProvider({
-      resource: resource,
-    });
-    const traceExporter = new OTLPTraceExporter();
-    const processor = new BatchSpanProcessor(traceExporter);
-    provider.addSpanProcessor(processor);
-
-    provider.register();
+    sdk.start();
   }
 
   static getTracer() {
