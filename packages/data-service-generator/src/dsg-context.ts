@@ -4,6 +4,7 @@ import {
   clientDirectories,
   ContextUtil,
   serverDirectories,
+  ModuleActionsAndDtosMap,
 } from "@amplication/code-gen-types";
 import { EnumResourceType } from "./models";
 import { readPluginStaticModules } from "./utils/read-static-modules";
@@ -21,9 +22,13 @@ class DsgContext implements types.DsgContext {
   public buildId: string;
   public roles: types.Role[] = [];
   public modules: types.ModuleMap;
+  public generateGrpc: boolean;
   // eslint-disable-next-line @typescript-eslint/naming-convention
   public DTOs: types.DTOs = {};
   public plugins: types.PluginMap = {};
+  public entityActionsMap: types.EntityActionsMap = {};
+  public moduleActionsAndDtoMap: ModuleActionsAndDtosMap;
+
   public readonly logger: IBuildLogger;
   public utils: ContextUtil = {
     skipDefaultBehavior: false,
@@ -67,6 +72,10 @@ class DsgContext implements types.DsgContext {
 
   public resourceType!: EnumResourceType;
   public pluginInstallations: types.PluginInstallation[] = [];
+  public moduleActions: types.ModuleAction[] = [];
+  public moduleContainers: types.ModuleContainer[] = [];
+  public moduleDtos: types.ModuleDto[] = [];
+
   public otherResources?: types.DSGResourceData[] | undefined;
 }
 

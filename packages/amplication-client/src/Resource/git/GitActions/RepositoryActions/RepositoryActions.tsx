@@ -1,4 +1,4 @@
-import { EnumGitProvider } from "@amplication/code-gen-types/models";
+import { EnumGitProvider } from "@amplication/code-gen-types";
 import {
   Button,
   EnumButtonStyle,
@@ -47,7 +47,7 @@ export default function RepositoryActions({
                   direction={EnumFlexDirection.Row}
                   gap={EnumGapSize.Small}
                 >
-                  <Icon icon="info_circle" />
+                  <Icon icon="info_circle" color={EnumTextColor.White} />
                   No repository was selected
                 </FlexItem>
               </Text>

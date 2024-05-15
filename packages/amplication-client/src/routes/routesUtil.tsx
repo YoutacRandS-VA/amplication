@@ -1,10 +1,18 @@
-import React, { Suspense } from "react";
+import React, { Suspense, lazy } from "react";
 import { Redirect, Route, Switch } from "react-router-dom";
 import { RouteDef } from "./appRoutes";
 import useAuthenticated from "../authentication/use-authenticated";
 import * as analytics from "../util/analytics";
-import { CircularProgress } from "@amplication/ui/design-system";
-import NotFoundPage from "../404/NotFoundPage";
+import { monitoring } from "../util/monitoring";
+
+//use lazy loading imports to prevent inclusion of the components CSS in the main bundle
+const CircularProgress = lazy(
+  () =>
+    import(
+      "@amplication/ui/design-system/components/CircularProgress/CircularProgress"
+    )
+);
+const NotFoundPage = lazy(() => import("../404/NotFoundPage"));
 
 export type AppRouteProps = {
   moduleName: string | undefined;
@@ -124,5 +132,11 @@ const pageTracking = (path: string, url: string, params: any) => {
     path,
     url,
     params: params,
+  });
+
+  const cleanPath = path.replaceAll("([A-Za-z0-9-]{20,})", "");
+  monitoring.recordPageView({
+    pageId: cleanPath,
+    pageAttributes: params,
   });
 };

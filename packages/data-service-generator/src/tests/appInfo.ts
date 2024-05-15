@@ -1,6 +1,6 @@
 import { AppInfo } from "@amplication/code-gen-types";
 import { EnumAuthProviderType } from "../models";
-import { CodeGeneratorVersionStrategy } from "@amplication/code-gen-types/models";
+import { CodeGeneratorVersionStrategy } from "@amplication/code-gen-types";
 
 export const MODULE_EXTENSIONS_TO_SNAPSHOT = [
   ".ts",
@@ -10,6 +10,7 @@ export const MODULE_EXTENSIONS_TO_SNAPSHOT = [
   ".yml",
   ".json",
   ".gitignore",
+  ".proto",
 ];
 
 export const appInfo: AppInfo = {
@@ -23,6 +24,7 @@ export const appInfo: AppInfo = {
     serverSettings: {
       generateGraphQL: true,
       generateRestApi: true,
+      generateServer: true,
       serverPath: "",
     },
     adminUISettings: {
@@ -34,4 +36,5 @@ export const appInfo: AppInfo = {
     codeGeneratorVersion: null,
     codeGeneratorStrategy: CodeGeneratorVersionStrategy.LatestMajor,
   },
+  codeGeneratorName: "",
 };

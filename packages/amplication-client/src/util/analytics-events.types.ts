@@ -11,6 +11,7 @@ export enum AnalyticsEventNames {
   SignInWithGitHub = "signInWithGitHub",
   SignInWithUserName = "signInWithUserName",
   ContinueWithSSOClick = "continueWithSSOClick",
+  EmailLogin = "EmailLogin",
 
   // account
   AccountInfoUpdate = "updateAccountInfo",
@@ -38,6 +39,7 @@ export enum AnalyticsEventNames {
   FeatureRequestTileClick = "featureRequestTileClick",
   NewVersionTileFixEntitiesClick = "newVersionTileClick-fixEntities",
   RolesTileClick = "rolesTileClick",
+  PluginCategoryTileClick = "pluginCategoryTileClick",
 
   // project & project configuration
   ProjectConfigurationsSettingsUpdate = "updateProjectConfigurationsSettings",
@@ -63,6 +65,7 @@ export enum AnalyticsEventNames {
 
   RelatedEntityFix = "fixRelatedEntity",
   EntitiesTileClick = "entitiesTileClick",
+  APIsTileClick = "apisTileClick",
   PluginsTileClick = "pluginsTileClick",
   ImportPrismaSchemaClick = "importPrismaSchemaClick",
   ImportPrismaSchemaJoinBetaClick = "importPrismaSchemaJoinBetaClick",
@@ -77,12 +80,8 @@ export enum AnalyticsEventNames {
   BackToProjectsClick = "backToProjectsClick",
 
   // topic
-  TopicCreate = "topicCreate",
-  TopicCreateFailed = "topicCreateFailed",
-  TopicNameEdit = "topicNameEdit",
-  TopicDisplayNameEdit = "topicDisplayNameEdit",
-  TopicDescriptionEdit = "topicDescriptionEdit",
-  TopicsSearch = "topicsSearch",
+  TopicCreate = "createTopic",
+  TopicUpdate = "updateTopic",
 
   // commit & build & pending changes
   CommitClicked = "commitClicked",
@@ -94,6 +93,10 @@ export enum AnalyticsEventNames {
   // code view
   CodeViewTileClick = "viewCodeViewTileClick",
   GithubCodeViewClick = "openGithubCodeView",
+
+  // git provider
+  GitProviderConnectClick = "addGitProviderClick",
+  GitProviderCustomBaseBranch = "GitProviderCustomBaseBranch",
 
   // GitHub
   GitHubAuthResourceStart = "startAuthResourceWithGitHub",
@@ -107,24 +110,21 @@ export enum AnalyticsEventNames {
   CreateProjectConfiguration = "CreateProjectConfiguration",
   StarUsBannerCTAClick = "StarUsBannerCTAClick",
   StarUsBannerClose = "StarUsBannerClose",
-
-  // new event for startAuthResourceWithGitHub
-  AddGitProviderClick = "addGitProviderClick",
+  MWC2024BannerCTAClick = "MWC2024BannerCTAClick",
+  MWC2024BannerClose = "MWC2024BannerClose",
 
   // Purchase Page
   PricingPageClose = "PricingPageClose",
   PricingPageCTAClick = "PricingPageCTAClick",
   PassedLimitsNotificationClose = "PassedLimitsNotificationClose",
   PricingPageChangeBillingCycle = "PricingPageChangeBillingCycle",
-  UpgradeOnResourceListClick = "UpgradeOnResourceListClick",
-  UpgradeOnEntityListClick = "UpgradeOnEntityListClick",
-  UpgradeOnPassedLimitsClick = "UpgradeOnPassedLimitsClick",
   PricingPageChangeWorkspace = "PricingPageChangeWorkspace",
-  UpgradeOnTopBarClick = "UpgradeOnTopBarClick",
-  UpgradeFromCodeGeneratorVersionClick = "UpgradeFromCodeGeneratorVersionClick",
-  ContactUsButtonClick = "ContactUsButtonClick",
-  UpgradeOnSideBarClick = "UpgradeOnSideBarClick",
   ProFeatureLockClick = "ProFeatureLockClick",
+  ContactUsButtonClick = "ContactUsButtonClick",
+
+  // upgrade
+  UpgradeClick = "UpgradeClick",
+  UpgradeLaterClick = "UpgradeLaterClick",
 
   // Chat widget
   HelpMenuItemClick = "HelpMenuItemClick",
@@ -154,4 +154,23 @@ export enum AnalyticsEventNames {
   ViewServiceWizardError = "ViewServiceWizardError",
   ServiceWizardError_TryAgain = "ServiceWizardError_TryAgain",
   ServiceWizardError_Continue = "ServiceWizardError_Continue",
+
+  // notification
+  OpenNotificationCenter = "OpenNotificationCenter",
+  ClickNotificationMessage = "ClickNotificationMessage",
+
+  // break the monolith
+  StartBreakTheMonolithClick = "StartBreakTheMonolithClick",
+  ModelOrganizer_AddServiceClick = "ModelOrganizer_AddServiceClick",
+  ModelOrganizer_MoveEntity = "ModelOrganizer_MoveEntity",
+
+  // break the monolith preview user
+  PreviewUser_GenerateCode = "PreviewUser_GenerateCode",
+
+  ChangedToDotNet = "ChangedToDotNet",
+  ChoseDotNetUsage = "ChoseDotNetUsage",
+  BookDotNetDemo = "BookDotNetDemo",
+
+  AskJovuClick = "AskJovuClick",
+  CreateWithJovuClick = "CreateWithJovuClick",
 }

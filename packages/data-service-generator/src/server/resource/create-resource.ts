@@ -13,22 +13,29 @@ import { createEntityControllerSpec } from "./test/create-controller-spec";
 import { createResolverModules } from "./resolver/create-resolver";
 import { builders } from "ast-types";
 import DsgContext from "../../dsg-context";
+import { createGrpcControllerModules } from "./grpc-controller/create-grpc-controller";
 
 export async function createResourcesModules(
-  entities: Entity[]
+  entities: Entity[],
+  dtoNameToPath: Record<string, string>
 ): Promise<ModuleMap> {
   const resourceModules = new ModuleMap(DsgContext.getInstance.logger);
   for await (const entity of entities) {
-    await resourceModules.merge(await createResourceModules(entity));
+    await resourceModules.merge(
+      await createResourceModules(entity, dtoNameToPath)
+    );
   }
 
   return resourceModules;
 }
 
-async function createResourceModules(entity: Entity): Promise<ModuleMap> {
+async function createResourceModules(
+  entity: Entity,
+  dtoNameToPath: Record<string, string>
+): Promise<ModuleMap> {
   const entityType = entity.name;
   const context = DsgContext.getInstance;
-  const { appInfo } = context;
+  const { appInfo, generateGrpc } = context;
 
   validateEntityName(entity);
 
@@ -45,7 +52,8 @@ async function createResourceModules(entity: Entity): Promise<ModuleMap> {
     entity,
     serviceId,
     serviceBaseId,
-    delegateId
+    delegateId,
+    dtoNameToPath
   );
 
   const [serviceModule] = serviceModules.modules();
@@ -57,11 +65,26 @@ async function createResourceModules(entity: Entity): Promise<ModuleMap> {
         entityName,
         entityType,
         serviceModule.path,
-        entity
+        entity,
+        dtoNameToPath
       ))) ||
     new ModuleMap(DsgContext.getInstance.logger);
 
   const [controllerModule, controllerBaseModule] = controllerModules.modules();
+
+  const grpcControllerModules =
+    (generateGrpc &&
+      (await createGrpcControllerModules(
+        resource,
+        entityName,
+        entityType,
+        serviceModule.path,
+        entity,
+        dtoNameToPath
+      ))) ||
+    new ModuleMap(DsgContext.getInstance.logger);
+
+  const [grpcControllerModule] = grpcControllerModules.modules();
 
   const resolverModules =
     (appInfo.settings.serverSettings.generateGraphQL &&
@@ -69,7 +92,8 @@ async function createResourceModules(entity: Entity): Promise<ModuleMap> {
         entityName,
         entityType,
         serviceModule.path,
-        entity
+        entity,
+        dtoNameToPath
       ))) ||
     new ModuleMap(DsgContext.getInstance.logger);
   const [resolverModule] = resolverModules.modules();
@@ -79,6 +103,7 @@ async function createResourceModules(entity: Entity): Promise<ModuleMap> {
     entityType,
     serviceModule.path,
     controllerModule?.path,
+    grpcControllerModule?.path,
     resolverModule?.path
   );
 
@@ -98,6 +123,7 @@ async function createResourceModules(entity: Entity): Promise<ModuleMap> {
   await moduleMap.mergeMany([
     serviceModules,
     controllerModules,
+    grpcControllerModules,
     resolverModules,
     resourceModules,
     testModule,

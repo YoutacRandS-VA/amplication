@@ -5,8 +5,8 @@ import {
   ModuleMap,
 } from "@amplication/code-gen-types";
 import { readStaticModules } from "../utils/read-static-modules";
-import { formatCode, formatJson } from "@amplication/code-gen-utils";
-import { createDTOModules, createDTOs } from "./resource/create-dtos";
+import { formatCode } from "@amplication/code-gen-utils";
+import { createDTOModules } from "./resource/create-dtos";
 import { createResourcesModules } from "./resource/create-resource";
 import { createSwagger } from "./swagger/create-swagger";
 import { createAppModule } from "./app-module/create-app-module";
@@ -25,6 +25,9 @@ import { createDockerComposeDevFile } from "./docker-compose/create-docker-compo
 import { createTypesRelatedFiles } from "./create-types-related-files/create-types-related-files";
 import { createMainFile } from "./create-main/create-main-file";
 import { connectMicroservices } from "./connect-microservices/connect-microservices";
+import { createSecretsManager } from "./secrets-manager/create-secrets-manager";
+import { createCustomDtos } from "./resource/dto/custom-types/create-custom-dtos";
+import { createCustomModulesModules } from "./custom-module/create-custom-module";
 
 const STATIC_DIRECTORY = path.resolve(__dirname, "static");
 
@@ -48,19 +51,26 @@ async function createServerInternal(
     serverDirectories.baseDirectory
   );
 
+  await context.logger.info("Creating custom DTOs...");
+  const { customDtos, dtoNameToPath } = await createCustomDtos();
+
   await context.logger.info("Creating gitignore...");
   const gitIgnore = await createGitIgnore();
 
   await context.logger.info("Creating package.json...");
   const packageJsonModule = await createServerPackageJson();
 
-  await context.logger.info("Creating DTOs...");
-  const dtos = await createDTOs(context.entities);
-  context.DTOs = dtos;
-  const dtoModules = await createDTOModules(dtos);
+  await context.logger.info("Creating server DTOs...");
+  const dtoModules = await createDTOModules(context.DTOs, dtoNameToPath);
 
   await context.logger.info("Creating resources...");
-  const resourcesModules = await createResourcesModules(entities);
+  const resourcesModules = await createResourcesModules(
+    entities,
+    dtoNameToPath
+  );
+
+  await context.logger.info("Creating custom modules...");
+  const customModulesModules = await createCustomModulesModules(dtoNameToPath);
 
   await context.logger.info("Creating auth module...");
   const authModules = await createAuthModules();
@@ -69,40 +79,56 @@ async function createServerInternal(
   const swagger = await createSwagger();
 
   await context.logger.info("Creating seed script...");
-  const seedModule = await createSeed();
+  const seedModule = await createSeed(dtoNameToPath);
 
   await context.logger.info("Creating message broker...");
   const messageBrokerModules = await createMessageBroker({});
 
+  await context.logger.info("Creating SecretsManager...");
+  const secretsManagerModule = await createSecretsManager({
+    secretsNameKey: [],
+  });
+
   await context.logger.info("Creating application module...");
 
   const appModuleInputModules = new ModuleMap(context.logger);
-  await appModuleInputModules.mergeMany([resourcesModules, staticModules]);
+  await appModuleInputModules.mergeMany([
+    resourcesModules,
+    customModulesModules,
+    staticModules,
+    secretsManagerModule,
+  ]);
   const appModule = await createAppModule(appModuleInputModules);
 
   await context.logger.info("Formatting resources code...");
-  await resourcesModules.replaceModulesCode((code) => formatCode(code));
-  await context.logger.info("Formatting dtos code...");
-  await dtoModules.replaceModulesCode((code) => formatCode(code));
+  await resourcesModules.replaceModulesCode((path, code) =>
+    formatCode(path, code)
+  );
+  await context.logger.info("Formatting DTOs code...");
+  await dtoModules.replaceModulesCode((path, code) => formatCode(path, code));
   await context.logger.info("Formatting swagger code...");
-  await swagger.replaceModulesCode((code) => formatCode(code));
+  await swagger.replaceModulesCode((path, code) => formatCode(path, code));
   await context.logger.info("Formatting application module code...");
-  await appModule.replaceModulesCode((code) => formatCode(code));
+  await appModule.replaceModulesCode((path, code) => formatCode(path, code));
   await context.logger.info("Formatting seed code...");
-  await seedModule.replaceModulesCode((code) => formatCode(code));
+  await seedModule.replaceModulesCode((path, code) => formatCode(path, code));
   await context.logger.info("Formatting auth module code...");
-  await authModules.replaceModulesCode((code) => formatCode(code));
+  await authModules.replaceModulesCode((path, code) => formatCode(path, code));
   await context.logger.info("Formatting message broker code...");
-  await messageBrokerModules.replaceModulesCode((code) => formatCode(code));
+  await messageBrokerModules.replaceModulesCode((path, code) =>
+    formatCode(path, code)
+  );
   await context.logger.info("Formatting package.json code...");
-  await packageJsonModule.replaceModulesCode((code) => formatJson(code));
+  await packageJsonModule.replaceModulesCode((path, code) =>
+    formatCode(path, code)
+  );
 
   const typesRelatedFiles = await createTypesRelatedFiles();
   const mainFile = await createMainFile();
   await context.logger.info("Creating Prisma schema...");
   const prismaSchemaModule = await createPrismaSchemaModule(entities);
 
-  await context.logger.info("Creating Dot Env...");
+  await context.logger.info("Creating Dotenv...");
   const dotEnvModule = await createDotEnvModule({
     envVariables: ENV_VARIABLES,
   });
@@ -110,7 +136,7 @@ async function createServerInternal(
   await context.logger.info("Creating connectMicroservices function...");
   const connectMicroservicesModule = await connectMicroservices();
 
-  await context.logger.info("Creating Docker compose configurations...");
+  await context.logger.info("Creating Docker Compose configurations...");
   const dockerComposeFile = await createDockerComposeFile();
   const dockerComposeDevFile = await createDockerComposeDevFile();
 
@@ -118,15 +144,18 @@ async function createServerInternal(
   const moduleMap = new ModuleMap(context.logger);
   await moduleMap.mergeMany([
     staticModules,
+    customDtos,
     gitIgnore,
     packageJsonModule,
     resourcesModules,
+    customModulesModules,
     dtoModules,
     swagger,
     appModule,
     seedModule,
     authModules,
     messageBrokerModules,
+    secretsManagerModule,
     prismaSchemaModule,
     dotEnvModule,
     dockerComposeFile,

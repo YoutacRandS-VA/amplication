@@ -42,7 +42,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           token: ${{ secrets.RELEASE_PRODUCTION_PAT }}
@@ -68,7 +68,7 @@ jobs:
           git tag -d ${{ github.event.inputs.version }}> /dev/null
         id: check-tag
 
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v4
         with:
           node-version-file: "package.json"
           cache: "npm"
@@ -76,7 +76,7 @@ jobs:
 
       - name: Cache global node modules
         id: cache-node-modules
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         env:
           cache-name: cache-node-modules
         with:
@@ -90,9 +90,9 @@ jobs:
       - name: Check release is needed
         run: |
           export NX_BASE="${{ steps.check-tag.outputs.previous-tag }}"
-          AFFECTED_APPS=$(npx nx print-affected --type=app | jq -c .projects)
-          AFFECTED_DEPLOYABLE_CONTAINER_APPS=$(npx nx print-affected --target=deploy:container --type=app | jq -c .projects)
-          AFFECTED_DEPLOYABLE_STATIC_APPS=$(npx nx print-affected --target=deploy:static --type=app | jq -c .projects)
+          AFFECTED_APPS=$(npx nx show projects --affected --json --type=app | jq -c .)
+          AFFECTED_DEPLOYABLE_CONTAINER_APPS=$(npx nx show projects --affected --json --with-target deploy:container --type=app | jq -c .)
+          AFFECTED_DEPLOYABLE_STATIC_APPS=$(npx nx show projects --affected --json --with-target deploy:static --type=app | jq -c .)
 
           if [[ $AFFECTED_DEPLOYABLE_CONTAINER_APPS == "[]" ]] && [[ $AFFECTED_DEPLOYABLE_STATIC_APPS == "[]" ]]; then
             echo -e "$ECHO_YELLOW affected-apps: $AFFECTED_APPS"
@@ -115,7 +115,7 @@ jobs:
         run: |
           VERSION=${{ github.event.inputs.version }}
           APP_VERSION=${VERSION:1}
-          npx nx affected --target=update-version --all --args="--version=$APP_VERSION"
+          npx nx run-many --target=update-version --args="--version=$APP_VERSION"
 
       # Commit all changed files back to the repository
       - name: Commit changes
@@ -148,7 +148,7 @@ jobs:
                   "exhaustive_rules": "true",
                   "rules": [
                     {
-                      "pattern": "(app|lib):(?!data-service-generator)",
+                      "pattern": "(app|lib):(?!data-service-generator|local-data-service-generator-controller)",
                       "on_property": "labels",
                       "flags": "gu"
                     }

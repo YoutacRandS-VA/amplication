@@ -1,5 +1,5 @@
 import "./index.scss";
-import "./style/css-variables.scss";
+//import "./style/css-variables.scss"; // Do not load the css-variables here, instead load them in the client(s)
 import "./style/icon.scss";
 export {
   Button,
@@ -7,8 +7,10 @@ export {
   EnumButtonState,
   EnumIconPosition,
 } from "./components/Button/Button";
-
 export type { Props as ButtonProps } from "./components/Button/Button";
+
+export { ButtonProgress } from "./components/ButtonProgress/ButtonProgress";
+export type { Props as ButtonProgressProps } from "./components/ButtonProgress/ButtonProgress";
 
 export {
   default as CircleIcon,
@@ -76,7 +78,7 @@ export { ToggleButton } from "./components/ToggleButton/ToggleButton";
 
 export type { Props as ToggleButtonProps } from "./components/ToggleButton/ToggleButton";
 
-export { Toggle } from "./components/Toggle/Toggle";
+export { Toggle, EnumToggleStyle } from "./components/Toggle/Toggle";
 export type { Props as ToggleProps } from "./components/Toggle/Toggle";
 
 export { ToggleField } from "./components/Toggle/ToggleField";
@@ -105,13 +107,9 @@ export type { Props as CircleBadgeProps } from "./components/CircleBadge/CircleB
 export { default as Page } from "./components/Page/Page";
 export type { Props as PageProps } from "./components/Page/Page";
 
-export { Form, EnumFormStyle } from "./components/Form/Form";
+export { Form } from "./components/Form/Form";
 
 export type { Props as FormProps } from "./components/Form/Form";
-
-export { FormHeader } from "./components/Form/FormHeader";
-
-export type { Props as FormHeaderProps } from "./components/Form/FormHeader";
 
 export { default as Breadcrumbs } from "./components/Breadcrumbs/Breadcrumbs";
 
@@ -119,7 +117,7 @@ export type { Props as BreadcrumbsProps } from "./components/Breadcrumbs/Breadcr
 
 export type { ItemProps as BreadcrumbsItemProps } from "./components/Breadcrumbs/Breadcrumbs";
 
-export { Snackbar } from "./components/Snackbar/Snackbar";
+export { Snackbar, EnumMessageType } from "./components/Snackbar/Snackbar";
 
 export type { Props as SnackbarProps } from "./components/Snackbar/Snackbar";
 
@@ -131,7 +129,7 @@ export type { Props as RadioButtonFieldProps } from "./components/RadioButton/Ra
 
 export { Label } from "./components/Label/Label";
 export type { Props as LabelProps } from "./components/Label/Label";
-export { CircularProgress } from "./components/CircularProgress/CircularProgress";
+export { default as CircularProgress } from "./components/CircularProgress/CircularProgress";
 
 export type { Props as CircularProgressProps } from "./components/CircularProgress/CircularProgress";
 
@@ -158,7 +156,7 @@ export {
   EnumHorizontalRuleStyle,
 } from "./components/HorizontalRule/HorizontalRule";
 
-export { FullScreenLoader } from "./components/Loader/FullScreenLoader";
+export { default as FullScreenLoader } from "./components/Loader/FullScreenLoader";
 export type { Props as FullScreenLoaderProps } from "./components/Loader/FullScreenLoader";
 
 export { Loader, AnimationType } from "./components/Loader/Loader";
@@ -176,7 +174,7 @@ export type { LinkProps as UpgradeLinkProps } from "./components/LimitationNotif
 export { ContactUsLinkForEnterprise } from "./components/LimitationNotification/LimitationNotification";
 export type { LinkProps as ContactUsLinkForEnterpriseProps } from "./components/LimitationNotification/LimitationNotification";
 
-export { PlanUpgradeConfirmation } from "./components/PlanUpgradeConfirmation/PlanUpgradeConfirmation";
+export { default as PlanUpgradeConfirmation } from "./components/PlanUpgradeConfirmation/PlanUpgradeConfirmation";
 export type { Props as PlanUpgradeConfirmationProps } from "./components/PlanUpgradeConfirmation/PlanUpgradeConfirmation";
 
 export { default as Tabs } from "./components/Tabs/Tabs";
@@ -209,10 +207,57 @@ export {
   EnumChipStyle,
 } from "./components/Chip/Chip";
 
-export { List, Props as ListProps } from "./components/List/List";
+export {
+  List,
+  Props as ListProps,
+  EnumListStyle,
+} from "./components/List/List";
 export { ListItem, Props as ListItemProps } from "./components/List/ListItem";
+export {
+  ClickableListItemWithInnerActions,
+  Props as ClickableListItemWithInnerActionsProps,
+} from "./components/List/ClickableListItemWithActions";
 
 export {
   TabContentTitle,
   Props as TabContentTitleProps,
 } from "./components/TabContentTitle/TabContentTitle";
+
+export {
+  default as EnabledIndicator,
+  Props as EnabledIndicatorProps,
+} from "./components/EnabledIndicator/EnabledIndicator";
+
+export {
+  VerticalNavigation,
+  Props as VerticalNavigationProps,
+} from "./components/VerticalNavigation/VerticalNavigation";
+
+export {
+  VerticalNavigationItem,
+  Props as VerticalNavigationItemProps,
+} from "./components/VerticalNavigation/VerticalNavigationItem";
+
+export {
+  ApiOperationTag,
+  Props as ApiOperationTagProps,
+  EnumApiOperationTagStyle,
+  EnumRestApiOperationTagType,
+  EnumGqlApiOperationTagType,
+} from "./components/ApiOperationTag/ApiOperationTag";
+
+export {
+  CollapsibleList,
+  Props as CollapsibleListProps,
+} from "./components/CollapsibleList/CollapsibleList";
+
+export {
+  CollapsibleListItem,
+  Props as CollapsibleListItemProps,
+} from "./components/CollapsibleList/CollapsibleListItem";
+export { JumboButton } from "./components/JumboButton/JumboButton";
+
+export { NavigationFilter } from "./components/NavigationFilter/NavigationFilter";
+export { NavigationFilterItem } from "./components/NavigationFilter/NavigationFilterItem";
+
+export type { Props as NavigationFilterItemProps } from "./components/NavigationFilter/NavigationFilterItem";
