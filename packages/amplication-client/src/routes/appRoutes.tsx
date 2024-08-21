@@ -179,7 +179,7 @@ export const Routes: RouteDef[] = [
                 isAnalytics: true,
               },
               {
-                path: "/:workspace([A-Za-z0-9-]{20,})/:project([A-Za-z0-9-]{20,})/dotnet-promote",
+                path: "/:workspace([A-Za-z0-9-]{20,})/:project([A-Za-z0-9-]{20,})/dotnet-upgrade",
                 Component: lazy(
                   () => import("../VersionControl/DotNetPromotePage")
                 ),
@@ -222,6 +222,20 @@ export const Routes: RouteDef[] = [
                 ),
                 moduleName: "CreateMessageBroker",
                 moduleClass: "create-message-broker",
+                routeTrackType: "",
+                exactPath: true,
+                isAnalytics: true,
+              },
+              {
+                path: "/:workspace([A-Za-z0-9-]{20,})/:project([A-Za-z0-9-]{20,})/create-plugin-repository",
+                Component: lazy(
+                  () =>
+                    import(
+                      "../Resource/create-plugin-repository/CreatePluginRepository"
+                    )
+                ),
+                moduleName: "CreatePluginRepository",
+                moduleClass: "create-plugin-repository",
                 routeTrackType: "",
                 exactPath: true,
                 isAnalytics: true,

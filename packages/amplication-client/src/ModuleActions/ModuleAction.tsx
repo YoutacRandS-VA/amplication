@@ -1,7 +1,6 @@
 import {
   EnumContentAlign,
   EnumFlexDirection,
-  EnumFlexItemMargin,
   EnumTextStyle,
   FlexItem,
   Snackbar,
@@ -22,6 +21,7 @@ import { DeleteModuleAction } from "./DeleteModuleAction";
 import ModuleActionForm from "./ModuleActionForm";
 import useModuleAction from "./hooks/useModuleAction";
 import { useModulesContext } from "../Modules/modulesContext";
+import { useOnboardingChecklistContext } from "../OnboardingChecklist/context/OnboardingChecklistContext";
 
 type Props = AppRouteProps & {
   match: match<{
@@ -53,6 +53,8 @@ const ModuleAction = ({ match }: Props) => {
     updateModuleActionError,
   } = useModuleAction();
 
+  const { setOnboardingProps } = useOnboardingChecklistContext();
+
   useEffect(() => {
     if (!moduleActionId) return;
     getModuleAction({
@@ -83,17 +85,25 @@ const ModuleAction = ({ match }: Props) => {
         onCompleted: () => {
           addEntity(moduleActionId);
         },
-      }).catch(console.error);
+      })
+        .catch(console.error)
+        .then(() => {
+          setOnboardingProps({
+            apiUpdated: true,
+          });
+        });
     },
-    [updateModuleAction, moduleActionId, addEntity]
+    [updateModuleAction, moduleActionId, addEntity, setOnboardingProps]
   );
 
-  const onEnableChanged = useCallback(() => {
-    if (!data?.moduleAction) return;
-    handleSubmit({
-      enabled: !data.moduleAction.enabled,
-    });
-  }, [data?.moduleAction, handleSubmit]);
+  const onEnableChanged = useCallback(
+    (value: boolean) => {
+      handleSubmit({
+        enabled: value,
+      });
+    },
+    [handleSubmit]
+  );
 
   const hasError = Boolean(error) || Boolean(updateModuleActionError);
 
@@ -117,7 +127,9 @@ const ModuleAction = ({ match }: Props) => {
           <Toggle
             name={"enabled"}
             onValueChange={onEnableChanged}
-            checked={data?.moduleAction?.enabled}
+            checked={
+              data?.moduleAction?.enabled ? data?.moduleAction?.enabled : false
+            }
             disabled={!customActionsLicenseEnabled}
           ></Toggle>
           {data?.moduleAction && isCustomAction && (

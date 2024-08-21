@@ -1,4 +1,5 @@
 export enum EnumEventType {
+  UnknownEvent = "UNKNOWN_EVENT",
   Signup = "Signup",
   StartEmailSignup = "StartEmailSignup",
   CompleteEmailSignup = "CompleteEmailSignup",
@@ -26,7 +27,9 @@ export enum EnumEventType {
   InteractAmplicationAction = "InteractAmplicationAction",
   CreateUserDTO = "CreateUserDTO",
   InteractUserDTO = "InteractUserDTO",
-  SearchAPIs = "SearchAPIs",
+  ServiceCreate = "createService",
+  MessageBrokerCreate = "createMessageBroker",
+  PluginRepositoryCreate = "createPluginRepository",
 
   //Import Prisma Schema
   ImportPrismaSchemaStart = "importPrismaSchemaStart",
@@ -37,7 +40,6 @@ export enum EnumEventType {
   CodeGenerationError = "codeGenerationError",
 
   CodeGeneratorVersionUpdate = "codeGeneratorVersionUpdate",
-  CodeGeneratorNameUpdate = "codeGeneratorNameUpdate",
 
   RedeemCoupon = "RedeemCoupon",
 
@@ -45,4 +47,5 @@ export enum EnumEventType {
   ArchitectureRedesignStartRedesign = " architectureRedesign_StartRedesign",
   ArchitectureRedesignApply = "architectureRedesign__Apply",
   ArchitectureRedesignStartBreakTheMonolith = "architectureRedesign__StartBreakTheMonolith",
+  StartJovuThread = "StartJovuThread",
 }

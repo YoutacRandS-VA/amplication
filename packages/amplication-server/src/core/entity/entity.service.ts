@@ -36,7 +36,7 @@ import {
   CURRENT_VERSION_NUMBER,
   INITIAL_ENTITY_FIELDS,
   USER_ENTITY_NAME,
-  DEFAULT_ENTITIES,
+  DEFAULT_USER_ENTITY,
   DEFAULT_PERMISSIONS,
   SYSTEM_DATA_TYPES,
   DATA_TYPE_TO_DEFAULT_PROPERTIES,
@@ -272,6 +272,40 @@ export class EntityService {
     }
   }
 
+  private async checkServiceEntityLicense(resource: Resource) {
+    if (!this.billingService.isBillingEnabled) {
+      return;
+    }
+    await this.checkServiceLicense(resource);
+
+    const serviceEntityEntitlementPromise =
+      this.billingService.getNumericEntitlement(
+        resource.project.workspaceId,
+        BillingFeature.EntitiesPerService
+      );
+
+    const resourceEntitiesCount = this.prisma.entity.count({
+      where: {
+        resourceId: resource.id,
+        deletedAt: null,
+      },
+    });
+
+    const serviceEntityEntitlement = await serviceEntityEntitlementPromise;
+    if (
+      !serviceEntityEntitlement.hasAccess ||
+      (!serviceEntityEntitlement.isUnlimited &&
+        serviceEntityEntitlement.value <= (await resourceEntitiesCount))
+    ) {
+      const message =
+        "Your service reached its maximum number of entities allowed. To continue using additional entities, please upgrade your plan";
+      throw new BillingLimitationError(
+        message,
+        BillingFeature.EntitiesPerService
+      );
+    }
+  }
+
   async createOneEntity(
     args: CreateOneEntityArgs,
     user: User,
@@ -285,7 +319,7 @@ export class EntityService {
       include: { project: true },
     });
 
-    await this.checkServiceLicense(resource);
+    await this.checkServiceEntityLicense(resource);
 
     if (
       args.data?.name?.toLowerCase().trim() ===
@@ -299,7 +333,7 @@ export class EntityService {
       enforceValidation &&
       isReservedName(args.data?.name?.toLowerCase().trim())
     ) {
-      throw new ReservedNameError(args.data?.name?.toLowerCase().trim());
+      args.data.name = `${args.data?.name}Model`;
     }
 
     const newEntity = await this.prisma.entity.create({
@@ -758,12 +792,12 @@ export class EntityService {
     return entities;
   }
 
-  async createDefaultEntities(
+  async createDefaultUserEntity(
     resourceId: string,
     user: User
   ): Promise<Entity[]> {
     return await Promise.all(
-      DEFAULT_ENTITIES.map(async (entity) => {
+      DEFAULT_USER_ENTITY.map(async (entity) => {
         const { fields, ...rest } = entity;
         const newEntity = await this.createOneEntity(
           {
@@ -836,6 +870,13 @@ export class EntityService {
         );
       }
 
+      for (const relatedEntityField of relatedEntityFields) {
+        await this.deleteField(
+          { where: { id: relatedEntityField.id } },
+          user,
+          fieldStrategy
+        );
+      }
       try {
         await this.moduleService.deleteDefaultModuleForEntity(
           entity.resourceId,
@@ -856,15 +897,6 @@ export class EntityService {
           error
         );
       }
-
-      for (const relatedEntityField of relatedEntityFields) {
-        await this.deleteField(
-          { where: { id: relatedEntityField.id } },
-          user,
-          fieldStrategy
-        );
-      }
-
       return this.prisma.entity.update({
         where: args.where,
         data: {
@@ -2511,7 +2543,7 @@ export class EntityService {
       enforceValidation &&
       isReservedName(args.data?.name?.toLowerCase().trim())
     ) {
-      throw new ReservedNameError(args.data?.name?.toLowerCase().trim());
+      args.data.name = `${args.data?.name}Field`;
     }
 
     // Omit entity from received data

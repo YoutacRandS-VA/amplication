@@ -33,7 +33,8 @@ import {
 } from "./dto";
 import { RedesignProjectArgs } from "./dto/RedesignProjectArgs";
 import { UserAction } from "../userAction/dto";
-import { UpdateCodeGeneratorNameArgs } from "./dto/UpdateCodeGeneratorNameArgs";
+import { EnumCodeGenerator } from "./dto/EnumCodeGenerator";
+import { CODE_GENERATOR_NAME_TO_ENUM } from "./resource.service";
 
 @Resolver(() => Resource)
 @UseFilters(GqlResolverExceptionsFilter)
@@ -121,6 +122,19 @@ export class ResourceResolver {
     AuthorizableOriginParameter.ProjectId,
     "data.project.connect.id"
   )
+  async createPluginRepository(
+    @Args() args: CreateOneResourceArgs,
+    @UserEntity() user: User
+  ): Promise<Resource> {
+    return this.resourceService.createPluginRepository(args, user);
+  }
+
+  @Mutation(() => Resource, { nullable: false })
+  @Roles("ORGANIZATION_ADMIN")
+  @AuthorizeContext(
+    AuthorizableOriginParameter.ProjectId,
+    "data.project.connect.id"
+  )
   async createService(
     @Args() args: CreateOneResourceArgs,
     @UserEntity() user: User
@@ -183,17 +197,6 @@ export class ResourceResolver {
     return this.resourceService.updateCodeGeneratorVersion(args, user);
   }
 
-  @Mutation(() => Resource, {
-    nullable: true,
-  })
-  @AuthorizeContext(AuthorizableOriginParameter.ResourceId, "where.id")
-  async updateCodeGeneratorName(
-    @Args() args: UpdateCodeGeneratorNameArgs,
-    @UserEntity() user: User
-  ): Promise<Resource | null> {
-    return this.resourceService.updateCodeGeneratorName(args, user);
-  }
-
   @ResolveField(() => GitRepository, { nullable: true })
   async gitRepository(
     @Parent() resource: Resource
@@ -204,5 +207,19 @@ export class ResourceResolver {
   @ResolveField(() => Project)
   async project(@Parent() resource: Resource): Promise<Project> {
     return this.resourceService.project(resource.id);
+  }
+
+  @ResolveField(() => EnumCodeGenerator, { nullable: true })
+  async codeGenerator(
+    @Parent() resource: Resource
+  ): Promise<EnumCodeGenerator> {
+    const codeGenerator =
+      CODE_GENERATOR_NAME_TO_ENUM[resource.codeGeneratorName];
+
+    if (!codeGenerator) {
+      return EnumCodeGenerator.NodeJs;
+    }
+
+    return codeGenerator;
   }
 }

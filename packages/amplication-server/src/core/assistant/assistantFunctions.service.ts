@@ -1,10 +1,10 @@
-import { EnumModuleDtoType } from "@amplication/code-gen-types";
+import { EnumDataType, EnumModuleDtoType } from "@amplication/code-gen-types";
 import { AmplicationLogger } from "@amplication/util/nestjs/logging";
 import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { get } from "lodash";
+import { get, isEmpty } from "lodash";
 import { pascalCase } from "pascal-case";
-import { plural } from "pluralize";
+import { isPlural, plural, singular } from "pluralize";
 import { AuthorizableOriginParameter } from "../../enums/AuthorizableOriginParameter";
 import { Env } from "../../env";
 import { Block } from "../../models";
@@ -15,17 +15,24 @@ import { ModuleActionService } from "../moduleAction/moduleAction.service";
 import { ModuleDtoService } from "../moduleDto/moduleDto.service";
 import { PermissionsService } from "../permissions/permissions.service";
 import { PluginCatalogService } from "../pluginCatalog/pluginCatalog.service";
-import { PluginInstallationService } from "../pluginInstallation/pluginInstallation.service";
+import {
+  PluginInstallationService,
+  REQUIRES_AUTHENTICATION_ENTITY,
+} from "../pluginInstallation/pluginInstallation.service";
 import { ProjectService } from "../project/project.service";
 import { EnumPendingChangeOriginType } from "../resource/dto";
 import { EnumResourceType } from "../resource/dto/EnumResourceType";
-import { ResourceService } from "../resource/resource.service";
+import {
+  CODE_GENERATOR_NAME_TO_ENUM,
+  ResourceService,
+} from "../resource/resource.service";
 import { MessageLoggerContext } from "./assistant.service";
 import { AssistantContext } from "./dto/AssistantContext";
 import { EnumAssistantFunctions } from "./dto/EnumAssistantFunctions";
-
 import * as functionArgsSchemas from "./functions/";
 import * as functionsArgsTypes from "./functions/types";
+import { USER_ENTITY_NAME } from "../entity/constants";
+import { EnumCodeGenerator } from "../resource/dto/EnumCodeGenerator";
 
 export const MESSAGE_UPDATED_EVENT = "assistantMessageUpdated";
 
@@ -74,6 +81,10 @@ const FUNCTION_PERMISSIONS: {
     paramPath: "context.workspaceId",
   },
   installPlugins: {
+    paramType: AuthorizableOriginParameter.ResourceId,
+    paramPath: "serviceId",
+  },
+  getService: {
     paramType: AuthorizableOriginParameter.ResourceId,
     paramPath: "serviceId",
   },
@@ -278,13 +289,57 @@ export class AssistantFunctionsService {
     //iterate over the pluginIds and install each plugin synchronously
     //to support synchronous installation of multiple plugins we need first to fix the plugins order code in the pluginInstallation Service
     const installations = [];
+    let authEntityExist = false;
+
+    const service = await this.resourceService.resource({
+      where: {
+        id: serviceId,
+      },
+    });
+
+    if (!service) {
+      throw new Error(`Service with id ${serviceId} not found`);
+    }
+
+    const codeGenerator =
+      CODE_GENERATOR_NAME_TO_ENUM[service.codeGeneratorName] ||
+      EnumCodeGenerator.NodeJs;
+
     for (const pluginId of pluginIds) {
       const plugin = await this.pluginCatalogService.getPluginWithLatestVersion(
         pluginId
       );
       const pluginVersion = plugin.versions[0];
 
+      if (plugin.codeGeneratorName !== codeGenerator) {
+        installations.push({
+          result: `Plugin not installed. Plugin code generator "${plugin.codeGeneratorName}" is not compatible with the service code generator ${codeGenerator}`,
+        });
+        continue;
+      }
+
       const { version, settings, configurations } = pluginVersion;
+
+      if (
+        configurations &&
+        configurations[REQUIRES_AUTHENTICATION_ENTITY] === "true" &&
+        !authEntityExist
+      ) {
+        const authEntityName = await this.resourceService.getAuthEntityName(
+          serviceId,
+          context.user
+        );
+        if (!isEmpty(authEntityName)) {
+          authEntityExist = true;
+        } else {
+          //create auth entity
+          await this.resourceService.createDefaultAuthEntity(
+            serviceId,
+            context.user
+          );
+          authEntityExist = true;
+        }
+      }
 
       const installation = await this.pluginInstallationService.create(
         {
@@ -297,6 +352,7 @@ export class AssistantFunctionsService {
             settings: settings,
             configurations: configurations,
             resource: { connect: { id: serviceId } },
+            isPrivate: false,
           },
         },
         context.user
@@ -334,21 +390,44 @@ export class AssistantFunctionsService {
             pluralDisplayName = `${entityName}Items`;
           }
           try {
-            const entity = await this.entityService.createOneEntity(
-              {
-                data: {
-                  displayName: entityName,
-                  pluralDisplayName: pluralDisplayName,
-                  name: pascalCase(entityName),
-                  resource: {
-                    connect: {
-                      id: args.serviceId,
+            let entity;
+            if (
+              singular(entityName.toLowerCase()) ===
+              USER_ENTITY_NAME.toLowerCase()
+            ) {
+              try {
+                entity = await this.resourceService.createDefaultAuthEntity(
+                  args.serviceId,
+                  context.user
+                );
+              } catch (error) {
+                this.logger.warn(
+                  `Chat: Error creating default auth entity ${entityName}. Continue creating regular entity`,
+                  error,
+                  loggerContext
+                );
+              }
+            }
+
+            if (!entity) {
+              entity = await this.entityService.createOneEntity(
+                {
+                  data: {
+                    displayName: entityName,
+                    pluralDisplayName: pluralDisplayName,
+                    name: pascalCase(entityName),
+                    resource: {
+                      connect: {
+                        id: args.serviceId,
+                      },
                     },
                   },
                 },
-              },
-              context.user
-            );
+                context.user
+              );
+            }
+
+            const fields = await this.entityService.getFields(entity.id, {});
 
             const defaultModuleId =
               await this.moduleService.getDefaultModuleIdForEntity(
@@ -358,12 +437,17 @@ export class AssistantFunctionsService {
 
             return {
               entityLink: `${this.clientHost}/${context.workspaceId}/${context.projectId}/${args.serviceId}/entities/${entity.id}`,
+              entityFields: fields.map((field) => ({
+                id: field.id,
+                name: field.name,
+                type: field.dataType,
+              })),
               apisLink: `${this.clientHost}/${context.workspaceId}/${context.projectId}/${args.serviceId}/modules/${defaultModuleId}`,
               result: entity,
             };
           } catch (error) {
             this.logger.error(
-              `Chat: Error creating entity ${entityName}`,
+              `Chat: Error creating entity ${entityName}: ${error.message}`,
               error,
               loggerContext
             );
@@ -396,6 +480,14 @@ export class AssistantFunctionsService {
 
       const newFields = await Promise.all(
         args.fields?.map(async (field) => {
+          //Jovu currently supports only one-many relations.
+          //@todo: This validation should be changed after adding support for one-one/ many-many relations.
+          if (field.type === EnumDataType.Lookup && isPlural(field.name)) {
+            return {
+              error: `a lookup field [${field.name}] that is the many side of the relation can not be created because it is already created on the one side of the relation`,
+            };
+          }
+
           try {
             return this.entityService.createFieldByDisplayName(
               {
@@ -409,7 +501,8 @@ export class AssistantFunctionsService {
                   },
                 },
               },
-              context.user
+              context.user,
+              true
             );
           } catch (error) {
             this.logger.error(
@@ -440,7 +533,10 @@ export class AssistantFunctionsService {
         id: resource.id,
         name: resource.name,
         description: resource.description,
-        link: `${this.clientHost}/${context.workspaceId}/${context.projectId}/${resource.id}`,
+        codeGenerator:
+          CODE_GENERATOR_NAME_TO_ENUM[resource.codeGeneratorName] ||
+          EnumCodeGenerator.NodeJs,
+        link: `${this.clientHost}/${context.workspaceId}/${args.projectId}/${resource.id}`,
       }));
     },
     getServiceEntities: async (
@@ -474,7 +570,8 @@ export class AssistantFunctionsService {
           args.serviceDescription || "",
           args.projectId,
           context.user,
-          needDefaultDbPlugin
+          needDefaultDbPlugin,
+          args.codeGenerator
         );
 
       let pluginsResults = null;
@@ -580,7 +677,7 @@ export class AssistantFunctionsService {
       args: functionsArgsTypes.GetPlugins,
       context: AssistantContext
     ) => {
-      return this.pluginCatalogService.getPlugins();
+      return this.pluginCatalogService.getPlugins(args.codeGenerator);
     },
     installPlugins: async (
       args: functionsArgsTypes.InstallPlugins,
@@ -591,6 +688,25 @@ export class AssistantFunctionsService {
         args.serviceId,
         context
       );
+    },
+    getService: async (
+      args: functionsArgsTypes.GetService,
+      context: AssistantContext
+    ) => {
+      const resource = await this.resourceService.resource({
+        where: {
+          id: args.serviceId,
+        },
+      });
+      return {
+        id: resource.id,
+        name: resource.name,
+        description: resource.description,
+        codeGenerator:
+          CODE_GENERATOR_NAME_TO_ENUM[resource.codeGeneratorName] ||
+          EnumCodeGenerator.NodeJs,
+        link: `${this.clientHost}/${context.workspaceId}/${resource.projectId}/${resource.id}`,
+      };
     },
     getServiceModules: async (
       args: functionsArgsTypes.GetServiceModules,
@@ -772,7 +888,8 @@ export class AssistantFunctionsService {
     },
     createModuleAction: async (
       args: functionsArgsTypes.CreateModuleAction,
-      context: AssistantContext
+      context: AssistantContext,
+      loggerContext: MessageLoggerContext
     ) => {
       const name = pascalCase(args.actionName);
 
@@ -806,29 +923,47 @@ export class AssistantFunctionsService {
         },
         context.user
       );
-
-      const updatedAction = await this.moduleActionService.update(
-        {
-          data: {
-            displayName: args.actionName,
-            name: name,
-            description: args.actionDescription,
-            gqlOperation: args.gqlOperation,
-            restVerb: args.restVerb,
-            path: args.path,
-            inputType: args.inputType,
-            outputType: args.outputType,
+      try {
+        const updatedAction = await this.moduleActionService.update(
+          {
+            data: {
+              displayName: args.actionName,
+              name: name,
+              description: args.actionDescription,
+              gqlOperation: args.gqlOperation,
+              restVerb: args.restVerb,
+              path: args.path,
+              inputType: args.inputType,
+              outputType: args.outputType,
+            },
+            where: {
+              id: action.id,
+            },
           },
-          where: {
-            id: action.id,
+          context.user
+        );
+        return {
+          link: `${this.clientHost}/${context.workspaceId}/${context.projectId}/${args.serviceId}/modules/${args.moduleId}/actions/${action.id}`,
+          result: updatedAction,
+        };
+      } catch (error) {
+        this.logger.warn(
+          `Chat: failed to update newly created ModuleAction ${action.id}: ${error.message}. Deleting the action.`,
+          error,
+          loggerContext
+        );
+        await this.moduleActionService.delete(
+          {
+            where: {
+              id: action.id,
+            },
           },
-        },
-        context.user
-      );
-      return {
-        link: `${this.clientHost}/${context.workspaceId}/${context.projectId}/${args.serviceId}/modules/${args.moduleId}/actions/${action.id}`,
-        result: updatedAction,
-      };
+          context.user
+        );
+        throw new Error(
+          `Failed to create the moduleAction ${name} because of the following error. please fix the error and try again. ${error.message}`
+        );
+      }
     },
   };
 }

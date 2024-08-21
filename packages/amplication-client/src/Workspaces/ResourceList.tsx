@@ -1,7 +1,6 @@
 import {
   CircleBadge,
   CircularProgress,
-  EnumButtonStyle,
   EnumFlexDirection,
   EnumFlexItemMargin,
   EnumGapSize,
@@ -19,7 +18,7 @@ import {
 } from "@amplication/ui/design-system";
 import { Reference, gql, useMutation } from "@apollo/client";
 import { isEmpty } from "lodash";
-import { useCallback, useContext, useEffect, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import CreateResourceButton from "../Components/CreateResourceButton";
 import { EmptyState } from "../Components/EmptyState";
 import { EnumImages } from "../Components/SvgThemeImage";
@@ -32,10 +31,6 @@ import { formatError } from "../util/error";
 import { pluralize } from "../util/pluralize";
 import ResourceListItem from "./ResourceListItem";
 import { useStiggContext } from "@stigg/react-sdk";
-import {
-  BtmButton,
-  EnumButtonLocation,
-} from "../Resource/break-the-monolith/BtmButton";
 import { UsageInsights } from "../UsageInsights/UsageInsights";
 import "./ResourceList.scss";
 
@@ -59,6 +54,12 @@ function ResourceList() {
     errorResources,
     currentProject,
   } = useContext(AppContext);
+
+  const servicesLength = useMemo(() => {
+    return resources.filter(
+      (resource) => resource.resourceType === models.EnumResourceType.Service
+    ).length;
+  }, [resources]);
 
   const clearError = useCallback(() => {
     setError(null);
@@ -123,12 +124,10 @@ function ResourceList() {
               itemsAlign={EnumItemsAlign.Center}
               direction={EnumFlexDirection.Row}
             >
-              <BtmButton
-                openInFullScreen={true}
-                location={EnumButtonLocation.Project}
-                ButtonStyle={EnumButtonStyle.GradientOutline}
+              <CreateResourceButton
+                resourcesLength={resources.length}
+                servicesLength={servicesLength}
               />
-              <CreateResourceButton resourcesLength={resources.length} />
             </FlexItem>
           </>
         }

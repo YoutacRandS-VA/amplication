@@ -48,6 +48,10 @@ import {
   CreatePrSuccess,
   KAFKA_TOPICS,
   UserBuild,
+  DownloadPrivatePluginsRequest,
+  DownloadPrivatePluginsLog,
+  DownloadPrivatePluginsSuccess,
+  DownloadPrivatePluginsFailure,
 } from "@amplication/schema-registry";
 import { KafkaProducerService } from "@amplication/util/nestjs/kafka";
 import { GitProviderService } from "../git/git.provider.service";
@@ -64,20 +68,24 @@ const PROVIDERS_DISPLAY_NAME: { [key in EnumGitProvider]: string } = {
 };
 import { encryptString } from "../../util/encryptionUtil";
 import { ModuleDtoService } from "../moduleDto/moduleDto.service";
+import { PluginInstallation } from "../pluginInstallation/dto/PluginInstallation";
 
 export const HOST_VAR = "HOST";
 export const CLIENT_HOST_VAR = "CLIENT_HOST";
 export const GENERATE_STEP_MESSAGE = "Generating Application";
 export const GENERATE_STEP_NAME = "GENERATE_APPLICATION";
-export const BUILD_DOCKER_IMAGE_STEP_MESSAGE = "Building Docker image";
-export const BUILD_DOCKER_IMAGE_STEP_NAME = "BUILD_DOCKER";
-export const BUILD_DOCKER_IMAGE_STEP_FINISH_LOG =
-  "Built Docker image successfully";
-export const BUILD_DOCKER_IMAGE_STEP_FAILED_LOG = "Build Docker failed";
-export const BUILD_DOCKER_IMAGE_STEP_RUNNING_LOG =
-  "Waiting for Docker image...";
-export const BUILD_DOCKER_IMAGE_STEP_START_LOG =
-  "Starting to build Docker image. It should take a few minutes.";
+
+export const DOWNLOAD_PRIVATE_PLUGINS_STEP_MESSAGE =
+  "Downloading private plugins";
+export const DOWNLOAD_PRIVATE_PLUGINS_STEP_NAME = "DOWNLOAD_PRIVATE_PLUGINS";
+export const DOWNLOAD_PRIVATE_PLUGINS_STEP_FINISH_LOG =
+  "Successfully downloaded private plugins";
+export const DOWNLOAD_PRIVATE_PLUGINS_STEP_FAILED_LOG =
+  "Failed to download private plugins";
+export const DOWNLOAD_PRIVATE_PLUGINS_STEP_RUNNING_LOG =
+  "Downloading private plugins. It should take a few moments.";
+export const DOWNLOAD_PRIVATE_PLUGINS_STEP_START_LOG =
+  "Downloading private plugins job added to queue. Waiting for available worker...";
 
 export const PUSH_TO_GIT_STEP_NAME = "PUSH_TO_GIT_PROVIDER";
 export const PUSH_TO_GIT_STEP_MESSAGE = (gitProvider: EnumGitProvider) =>
@@ -145,12 +153,13 @@ export const ACTION_LOG_LEVEL: {
   debug: EnumActionLogLevel.Debug,
 };
 
-const INITIAL_ONBOARDING_COMMIT_MESSAGE_BODY = `Congratulations on your first commit with Amplication! 
-We encourage you to continue exploring the many ways Amplication can supercharge your development. 
- 
-If you find Amplication useful, please show your support and give our GitHub repo a star ⭐️   
-This simple action helps our open-source project grow and reach more developers like you. 
-Thank you and happy coding!`;
+const FIRST_COMMIT_MESSAGE_BODY = `Congratulations on your first commit!
+
+We encourage you to continue exploring how Amplication can enhance your development process, including easy management of entities, API generation, and the simplification of backend services management through extensive plugin system.
+
+Remember, [Amplication](https://amplication.com/) is the fastest way in the world to build production-ready backend services : ) 
+
+Happy coding!`;
 
 export function createInitialStepData(
   version: string,
@@ -285,8 +294,23 @@ export class BuildService {
       return;
     }
 
-    logger.info(JOB_STARTED_LOG);
-    await this.generate(logger, build, user);
+    const resourcePrivatePlugins: PluginInstallation[] =
+      await this.pluginInstallationService.getInstalledPrivatePluginsForBuild(
+        resourceId
+      );
+
+    if (resourcePrivatePlugins.length > 0) {
+      logger.info(`${resourcePrivatePlugins.length} private plugins found.`);
+      await this.downloadPrivatePlugins(
+        logger,
+        build,
+        user,
+        resourcePrivatePlugins
+      );
+    } else {
+      logger.info(JOB_STARTED_LOG);
+      await this.generate(logger, build, user);
+    }
 
     return build;
   }
@@ -323,7 +347,10 @@ export class BuildService {
     }
   }
 
-  async getGenerateCodeStep(buildId: string): Promise<ActionStep | undefined> {
+  async getBuildStep(
+    buildId: string,
+    buildStepName: string
+  ): Promise<ActionStep | undefined> {
     const [generateStep] = await this.prisma.build
       .findUnique({
         where: {
@@ -333,7 +360,7 @@ export class BuildService {
       .action()
       .steps({
         where: {
-          name: GENERATE_STEP_NAME,
+          name: buildStepName,
         },
       });
 
@@ -365,7 +392,7 @@ export class BuildService {
     status: EnumActionStepStatus.Success | EnumActionStepStatus.Failed,
     codeGeneratorVersion: string
   ): Promise<void> {
-    const step = await this.getGenerateCodeStep(buildId);
+    const step = await this.getBuildStep(buildId, GENERATE_STEP_NAME);
     if (!step) {
       throw new Error("Could not find generate code step");
     }
@@ -406,7 +433,7 @@ export class BuildService {
           },
         })
         .catch((error) =>
-          this.logger.error(`Failed to que user build ${buildId}`, error)
+          this.logger.error(`Failed to queue user build ${buildId}`, error)
         );
     }
 
@@ -460,6 +487,80 @@ export class BuildService {
         logger.info("Build generation message sent");
 
         return null;
+      },
+      true
+    );
+  }
+
+  /**
+   * Downloads private plugins for given build
+   */
+  private async downloadPrivatePlugins(
+    logger: ILogger,
+    build: Build,
+    user: User,
+    privatePlugins: PluginInstallation[]
+  ): Promise<string> {
+    return this.actionService.run(
+      build.actionId,
+      DOWNLOAD_PRIVATE_PLUGINS_STEP_NAME,
+      DOWNLOAD_PRIVATE_PLUGINS_STEP_MESSAGE,
+      async (step) => {
+        const { resourceId } = build;
+
+        logger.info("Writing 'plugin download' message to queue");
+
+        await this.onDownloadPrivatePluginLog({
+          resourceId: resourceId,
+          buildId: build.id,
+          level: "info",
+          message: DOWNLOAD_PRIVATE_PLUGINS_STEP_RUNNING_LOG,
+        });
+
+        try {
+          const pluginRepoGitSettings =
+            await this.resourceService.getPluginRepositoryGitSettingsByResource(
+              resourceId
+            );
+
+          const downloadPrivatePluginsRequest: DownloadPrivatePluginsRequest.KafkaEvent =
+            {
+              key: {
+                resourceId,
+              },
+              value: {
+                ...pluginRepoGitSettings,
+                buildId: build.id,
+                resourceId,
+                pluginIds: privatePlugins.map((plugin) => plugin.pluginId),
+              },
+            };
+
+          await this.kafkaProducerService.emitMessage(
+            KAFKA_TOPICS.DOWNLOAD_PRIVATE_PLUGINS_REQUEST_TOPIC,
+            downloadPrivatePluginsRequest
+          );
+
+          logger.info("The 'plugin download' message sent");
+
+          await this.onDownloadPrivatePluginLog({
+            resourceId: resourceId,
+            buildId: build.id,
+            level: "info",
+            message: DOWNLOAD_PRIVATE_PLUGINS_STEP_START_LOG,
+          });
+
+          return null;
+        } catch (error) {
+          await this.onDownloadPrivatePluginFailure({
+            buildId: build.id,
+            errorMessage: `Failed to download plugins: ${error.message}`,
+          });
+          logger.error(
+            "Failed to send 'plugin download' message to queue",
+            error
+          );
+        }
       },
       true
     );
@@ -626,7 +727,7 @@ export class BuildService {
   }
 
   public async onDsgLog(logEntry: CodeGenerationLog.Value): Promise<void> {
-    const step = await this.getGenerateCodeStep(logEntry.buildId);
+    const step = await this.getBuildStep(logEntry.buildId, GENERATE_STEP_NAME);
     await this.actionService.logByStepId(
       step.id,
       ACTION_LOG_LEVEL[logEntry.level],
@@ -667,6 +768,119 @@ export class BuildService {
     }
   }
 
+  public async onDownloadPrivatePluginSuccess(
+    response: DownloadPrivatePluginsSuccess.Value
+  ): Promise<void> {
+    const { buildId } = response;
+
+    const step = await this.getBuildStep(
+      buildId,
+      DOWNLOAD_PRIVATE_PLUGINS_STEP_NAME
+    );
+    if (!step) {
+      throw new Error("Could not find download private plugins step");
+    }
+
+    const build = await this.findOne({ where: { id: buildId } });
+
+    const user = await this.userService.findUser({
+      where: { id: build.userId },
+    });
+
+    const logger = this.logger.child({
+      buildId: build.id,
+      resourceId: build.resourceId,
+      userId: build.userId,
+      user,
+    });
+
+    //once all plugins are downloaded, we can start the code generation
+    await this.generate(logger, build, user);
+
+    await this.actionService.complete(step, EnumActionStepStatus.Success);
+  }
+
+  public async onDownloadPrivatePluginFailure(
+    response: DownloadPrivatePluginsFailure.Value
+  ): Promise<void> {
+    const { buildId } = response;
+
+    const build = await this.prisma.build.findUnique({
+      where: { id: buildId },
+      include: {
+        createdBy: { include: { account: true } },
+        resource: {
+          include: { project: true },
+        },
+      },
+    });
+
+    //write the error message to the log
+    await this.onDownloadPrivatePluginLog({
+      buildId: buildId,
+      level: "error",
+      message: response.errorMessage,
+      resourceId: build.resourceId,
+    });
+
+    const step = await this.getBuildStep(
+      buildId,
+      DOWNLOAD_PRIVATE_PLUGINS_STEP_NAME
+    );
+    if (!step) {
+      throw new Error("Could not find download private plugins step");
+    }
+
+    await this.actionService.complete(step, EnumActionStepStatus.Failed);
+  }
+
+  public async onDownloadPrivatePluginLog(
+    logEntry: DownloadPrivatePluginsLog.Value
+  ): Promise<void> {
+    const step = await this.getBuildStep(
+      logEntry.buildId,
+      DOWNLOAD_PRIVATE_PLUGINS_STEP_NAME
+    );
+    await this.actionService.logByStepId(
+      step.id,
+      ACTION_LOG_LEVEL[logEntry.level],
+      logEntry.message
+    );
+
+    if (ACTION_LOG_LEVEL[logEntry.level] === EnumActionLogLevel.Error) {
+      const build = await this.prisma.build.findUnique({
+        where: { id: logEntry.buildId },
+        include: {
+          createdBy: { include: { account: true } },
+          resource: {
+            include: {
+              project: {
+                select: {
+                  id: true,
+                  workspaceId: true,
+                },
+              },
+            },
+          },
+        },
+      });
+      await this.analytics.trackManual({
+        user: {
+          accountId: build.createdBy.account.id,
+          workspaceId: build.resource.project.workspaceId,
+        },
+        data: {
+          properties: {
+            resourceId: build.resource.id,
+            projectId: build.resource.project.id,
+            message: logEntry.message,
+            stepName: DOWNLOAD_PRIVATE_PLUGINS_STEP_NAME,
+          },
+          event: EnumEventType.CodeGenerationError,
+        },
+      });
+    }
+  }
   public async saveToGitProvider(buildId: string): Promise<void> {
     const build = await this.findOne({ where: { id: buildId } });
 
@@ -774,11 +988,11 @@ export class BuildService {
       const url = `${clientHost}/${project.workspaceId}/${project.id}/${resource.id}/builds/${build.id}`;
       const buildLinkHTML = `[${url}](${url})`;
 
-      const commitMessage = oldBuild
+      const commitMessage = oldBuild?.id
         ? commit.message && `Commit message: ${commit.message}.`
-        : INITIAL_ONBOARDING_COMMIT_MESSAGE_BODY;
+        : FIRST_COMMIT_MESSAGE_BODY; // this message will be shown only on the first commit to the repository
 
-      const commitBody = `Amplication build # ${build.id}\n${commitMessage}\nBuild URL: ${buildLinkHTML}`;
+      const commitBody = `Amplication build # ${build.id}\n\n${commitMessage}\n\nBuild URL: ${buildLinkHTML}`;
 
       const canUseCustomBaseBranch =
         await this.billingService.getBooleanEntitlement(
@@ -848,6 +1062,14 @@ export class BuildService {
           const createPullRequestEvent: CreatePrRequest.KafkaEvent = {
             key: {
               resourceRepositoryId: kafkaEventKey,
+              /**
+                  If the branch is not per resource, we want to create a PR for the entire project
+                  so we set the resourceId to null to indicate avoid
+                  git force action issues due to creating PR for specific resources in parallel
+                  */
+              resourceId: createPullRequestMessage.isBranchPerResource
+                ? resource.id
+                : null,
             },
             value: createPullRequestMessage,
           };
@@ -882,7 +1104,12 @@ export class BuildService {
       include: ENTITIES_INCLUDE,
     });
     return orderBy(
-      entities,
+      entities.map((entity) => {
+        return {
+          ...entity,
+          fields: orderBy(entity.fields, (field) => field.name),
+        };
+      }),
       (entity) => entity.createdAt
     ) as unknown as CodeGenTypes.Entity[];
   }

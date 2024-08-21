@@ -1,11 +1,18 @@
 import { List, Snackbar, TabContentTitle } from "@amplication/ui/design-system";
-import React, { useCallback, useContext, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { match } from "react-router-dom";
 import { DndProvider } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 import { AppRouteProps } from "../routes/routesUtil";
 import { formatError } from "../util/error";
-import usePlugins, { Plugin } from "./hooks/usePlugins";
+import usePlugins from "./hooks/usePlugins";
+import { Plugin } from "./hooks/usePluginCatalog";
 import * as models from "../models";
 import PluginsCatalogItem from "./PluginsCatalogItem";
 import { EnumImages } from "../Components/SvgThemeImage";
@@ -17,8 +24,11 @@ import { GET_ENTITIES } from "../Entity/EntityList";
 import { USER_ENTITY } from "../Entity/constants";
 import { TEntities } from "../Entity/NewEntity";
 import { CREATE_DEFAULT_ENTITIES } from "../Workspaces/queries/entitiesQueries";
-import { AppContext } from "../context/appContext";
+import { AppContext, useAppContext } from "../context/appContext";
 import useResource from "../Resource/hooks/useResource";
+import { useOnboardingChecklistContext } from "../OnboardingChecklist/context/OnboardingChecklistContext";
+import { useStiggContext } from "@stigg/react-sdk";
+import { BillingFeature } from "@amplication/util-billing-types";
 // import DragPluginsCatalogItem from "./DragPluginCatalogItem";
 
 type Props = AppRouteProps & {
@@ -37,10 +47,16 @@ const SUB_TITLE = "Manage your installed plugins";
 const InstalledPlugins: React.FC<Props> = ({ match }: Props) => {
   const { resource } = match.params;
 
+  const { currentResource } = useAppContext();
+
+  const { stigg } = useStiggContext();
+
+  const { hasAccess: canUsePrivatePlugins } = stigg.getBooleanEntitlement({
+    featureId: BillingFeature.PrivatePlugins,
+  });
+
   const {
     pluginInstallations,
-    // loadingPluginInstallations: loading,
-    // errorPluginInstallations: error,
     pluginCatalog,
     createPluginInstallation,
     createError,
@@ -49,8 +65,15 @@ const InstalledPlugins: React.FC<Props> = ({ match }: Props) => {
     pluginOrderObj,
     updatePluginOrder,
     UpdatePluginOrderError,
-    // onPluginDropped,
-  } = usePlugins(resource);
+    privatePluginCatalog,
+    loadPrivatePluginsCatalog,
+  } = usePlugins(resource, null, currentResource?.codeGenerator);
+
+  useEffect(() => {
+    if (canUsePrivatePlugins) {
+      loadPrivatePluginsCatalog();
+    }
+  }, [canUsePrivatePlugins, loadPrivatePluginsCatalog]);
 
   const [confirmInstall, setConfirmInstall] = useState<boolean>(false);
   const [isCreatePluginInstallation, setIsCreatePluginInstallation] =
@@ -65,6 +88,8 @@ const InstalledPlugins: React.FC<Props> = ({ match }: Props) => {
     useState<models.PluginInstallation>(null);
 
   const { addEntity } = useContext(AppContext);
+
+  const { setOnboardingProps } = useOnboardingChecklistContext();
 
   const { data: entities, refetch } = useQuery<TData>(GET_ENTITIES, {
     variables: {
@@ -98,9 +123,15 @@ const InstalledPlugins: React.FC<Props> = ({ match }: Props) => {
             resource: { connect: { id: resource } },
           },
         },
-      }).catch(console.error);
+      })
+        .catch(console.error)
+        .then(() => {
+          setOnboardingProps({
+            pluginInstalled: true,
+          });
+        });
     },
-    [createPluginInstallation, resource]
+    [createPluginInstallation, resource, setOnboardingProps]
   );
 
   const [createDefaultEntities] = useMutation<TEntities>(
@@ -237,7 +268,11 @@ const InstalledPlugins: React.FC<Props> = ({ match }: Props) => {
             pluginInstallations.map((installation) => (
               <PluginsCatalogItem
                 key={installation.id}
-                plugin={pluginCatalog[installation.pluginId]}
+                plugin={
+                  pluginCatalog[installation.pluginId] ||
+                  (privatePluginCatalog &&
+                    privatePluginCatalog[installation.pluginId])
+                }
                 pluginInstallation={installation as models.PluginInstallation}
                 onOrderChange={onOrderChange}
                 onInstall={handleInstall}

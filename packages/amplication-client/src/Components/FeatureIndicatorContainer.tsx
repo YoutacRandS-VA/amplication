@@ -14,9 +14,10 @@ import { BillingFeature } from "@amplication/util-billing-types";
 import React from "react";
 import {
   FeatureIndicator,
-  defaultTextEnd,
-  defaultTextStart,
-  disabledDefaultTextEnd,
+  DEFAULT_TEXT_END,
+  DEFAULT_TEXT_START,
+  DISABLED_DEFAULT_TEXT_END,
+  EnumCtaType,
 } from "./FeatureIndicator";
 import "./FeatureIndicatorContainer.scss";
 import { omit } from "lodash";
@@ -50,6 +51,9 @@ export type Props = {
   render?: (props: { disabled: boolean; icon?: IconType }) => ReactElement;
   reversePosition?: boolean;
   showTooltip?: boolean;
+  ctaType?: EnumCtaType;
+  actualUsage?: number | null;
+  paidPlansExclusive?: boolean;
 };
 
 export const FeatureIndicatorContainer: FC<Props> = ({
@@ -62,6 +66,9 @@ export const FeatureIndicatorContainer: FC<Props> = ({
   render,
   reversePosition,
   showTooltip = true,
+  ctaType = EnumCtaType.Upgrade,
+  actualUsage,
+  paidPlansExclusive = true,
 }) => {
   const { stigg } = useStiggContext();
   const { currentWorkspace } = useContext(AppContext);
@@ -102,14 +109,19 @@ export const FeatureIndicatorContainer: FC<Props> = ({
     }
 
     if (entitlementType === EntitlementType.Metered) {
-      const usageExceeded = usageLimit && currentUsage >= usageLimit;
+      const actualCurrentUsage =
+        actualUsage !== null ? actualUsage : currentUsage;
+      const usageExceeded = usageLimit && actualCurrentUsage >= usageLimit;
       const isDisabled = usageExceeded ?? !hasMeteredAccess;
       if (isPreviewPlan(subscriptionPlan) && !isDisabled) {
         setDisabled(null);
         setIcon(null);
         return;
       }
-      setDisabled(isDisabled);
+      if (actualUsage !== null) {
+        // do not consider metered access if actual usage is provided
+        setDisabled(usageExceeded);
+      } else setDisabled(isDisabled);
     }
   }, [
     featureId,
@@ -120,6 +132,7 @@ export const FeatureIndicatorContainer: FC<Props> = ({
     subscriptionPlan,
     status,
     entitlementType,
+    actualUsage,
   ]);
 
   const textStart = useMemo(() => {
@@ -127,33 +140,36 @@ export const FeatureIndicatorContainer: FC<Props> = ({
       return limitationText;
     }
     if (
-      subscriptionPlan === EnumSubscriptionPlan.Enterprise &&
+      (subscriptionPlan === EnumSubscriptionPlan.Enterprise ||
+        subscriptionPlan === EnumSubscriptionPlan.Essential) &&
       status !== EnumSubscriptionStatus.Trailing
     ) {
       return fullEnterpriseText;
     }
 
-    return defaultTextStart;
+    return DEFAULT_TEXT_START;
   }, [disabled, subscriptionPlan, status, limitationText, fullEnterpriseText]);
 
   const textEnd = useMemo(() => {
     if (disabled) {
-      return disabledDefaultTextEnd;
+      return DISABLED_DEFAULT_TEXT_END;
     }
     if (
-      subscriptionPlan === EnumSubscriptionPlan.Enterprise &&
+      (subscriptionPlan === EnumSubscriptionPlan.Enterprise ||
+        subscriptionPlan === EnumSubscriptionPlan.Essential) &&
       status !== EnumSubscriptionStatus.Trailing
     ) {
       return "";
     }
 
-    return defaultTextEnd;
+    return DEFAULT_TEXT_END;
   }, [disabled, subscriptionPlan, status]);
 
   const showTooltipLink = useMemo(() => {
     if (
       isPreviewPlan(subscriptionPlan) ||
-      (subscriptionPlan === EnumSubscriptionPlan.Enterprise &&
+      ((subscriptionPlan === EnumSubscriptionPlan.Enterprise ||
+        subscriptionPlan === EnumSubscriptionPlan.Essential) &&
         status !== EnumSubscriptionStatus.Trailing)
     ) {
       return false; // don't show the upgrade link when the plan is preview
@@ -173,12 +189,14 @@ export const FeatureIndicatorContainer: FC<Props> = ({
     }
 
     if (
-      subscriptionPlan === EnumSubscriptionPlan.Enterprise &&
-      status === EnumSubscriptionStatus.Trailing
+      (subscriptionPlan === EnumSubscriptionPlan.Enterprise ||
+        subscriptionPlan === EnumSubscriptionPlan.Essential) &&
+      status === EnumSubscriptionStatus.Trailing &&
+      paidPlansExclusive
     ) {
       setIcon(IconType.Diamond);
     }
-  }, [featureId, subscriptionPlan, status, disabled]);
+  }, [featureId, subscriptionPlan, status, disabled, paidPlansExclusive]);
 
   const renderProps = {
     disabled: disabled,
@@ -197,6 +215,7 @@ export const FeatureIndicatorContainer: FC<Props> = ({
           textStart={textStart}
           textEnd={textEnd}
           showTooltipLink={showTooltipLink}
+          ctaType={ctaType}
         ></FeatureIndicator>
       )}
       {!render &&
@@ -208,6 +227,7 @@ export const FeatureIndicatorContainer: FC<Props> = ({
             textStart={textStart}
             textEnd={textEnd}
             showTooltipLink={showTooltipLink}
+            ctaType={ctaType}
             element={
               featureIndicatorPlacement ===
               FeatureIndicatorPlacement.Outside ? (

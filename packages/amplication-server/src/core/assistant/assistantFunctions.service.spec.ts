@@ -6,13 +6,16 @@ import { MessageLoggerContext } from "./assistant.service";
 import { EnumAssistantFunctions } from "./dto/EnumAssistantFunctions";
 
 import { Env } from "../../env";
-import { Entity } from "../../models";
+import { Entity, Resource } from "../../models";
 import { EntityService } from "../entity/entity.service";
 import { ModuleService } from "../module/module.service";
 import { ModuleActionService } from "../moduleAction/moduleAction.service";
 import { ModuleDtoService } from "../moduleDto/moduleDto.service";
 import { PluginCatalogService } from "../pluginCatalog/pluginCatalog.service";
-import { PluginInstallationService } from "../pluginInstallation/pluginInstallation.service";
+import {
+  PluginInstallationService,
+  REQUIRES_AUTHENTICATION_ENTITY,
+} from "../pluginInstallation/pluginInstallation.service";
 import { ProjectService } from "../project/project.service";
 import { ResourceService } from "../resource/resource.service";
 import { AssistantFunctionsService } from "./assistantFunctions.service";
@@ -23,6 +26,10 @@ import { EnumBlockType } from "../../enums/EnumBlockType";
 import { Module } from "../module/dto/Module";
 import { AuthorizableOriginParameter } from "../../enums/AuthorizableOriginParameter";
 import { JsonSchemaValidationModule } from "../../services/jsonSchemaValidation.module";
+import { USER_ENTITY_NAME } from "../entity/constants";
+import { AmplicationError } from "../../errors/AmplicationError";
+import { EnumResourceType } from "@amplication/code-gen-types";
+import { EnumCodeGenerator } from "../resource/dto/EnumCodeGenerator";
 
 const EXAMPLE_CHAT_OPENAI_KEY = "EXAMPLE_CHAT_OPENAI_KEY";
 const EXAMPLE_WORKSPACE_ID = "EXAMPLE_WORKSPACE_ID";
@@ -92,15 +99,7 @@ const EXAMPLE_LOGGER_CONTEXT: MessageLoggerContext = {
   role: "user",
 };
 
-const entityServiceCreateOneEntityMock = jest.fn(() => EXAMPLE_ENTITY);
-const entityServiceCreateFieldByDisplayNameMock = jest.fn();
-const projectServiceCreateProjectMock = jest.fn();
-const resourceServiceCreateServiceWithDefaultSettingsMock = jest.fn();
-const moduleServiceCreateMock = jest.fn();
-const pluginInstallationServiceCreateMock = jest.fn(() => ({
-  id: "examplePluginId",
-}));
-const pluginCatalogServiceGetPluginWithLatestVersionMock = jest.fn(() => ({
+const EXAMPLE_PLUGIN = {
   id: "examplePluginId",
   pluginId: "examplePluginId",
   name: "exampleName",
@@ -113,6 +112,7 @@ const pluginCatalogServiceGetPluginWithLatestVersionMock = jest.fn(() => ({
   categories: ["exampleCategory1", "exampleCategory2"],
   type: "exampleType",
   taggedVersions: {},
+  codeGeneratorName: EnumCodeGenerator.NodeJs,
   versions: [
     {
       id: "exampleVersionId",
@@ -124,9 +124,36 @@ const pluginCatalogServiceGetPluginWithLatestVersionMock = jest.fn(() => ({
       configurations: {},
     },
   ],
+};
+
+const EXAMPLE_RESOURCE: Resource = {
+  id: EXAMPLE_RESOURCE_ID,
+  createdAt: new Date(),
+  updatedAt: new Date(),
+  name: "exampleName",
+  codeGeneratorName: "NodeJS",
+  description: "",
+  resourceType: EnumResourceType.Service,
+  gitRepositoryOverride: false,
+  licensed: true,
+};
+
+const entityServiceCreateOneEntityMock = jest.fn(() => EXAMPLE_ENTITY);
+const entityServiceCreateFieldByDisplayNameMock = jest.fn();
+const projectServiceCreateProjectMock = jest.fn();
+const resourceServiceCreateServiceWithDefaultSettingsMock = jest.fn();
+const moduleServiceCreateMock = jest.fn();
+const pluginInstallationServiceCreateMock = jest.fn(() => ({
+  id: "examplePluginId",
 }));
+const pluginCatalogServiceGetPluginWithLatestVersionMock = jest.fn(
+  () => EXAMPLE_PLUGIN
+);
 
 const resourceServiceResourcesMock = jest.fn();
+const resourceServiceResourceMock = jest.fn(() => {
+  return EXAMPLE_RESOURCE;
+});
 const moduleServiceFindManyMock = jest.fn(() => {
   return [EXAMPLE_MODULE];
 });
@@ -148,6 +175,11 @@ const moduleServiceGetDefaultModuleIdForEntityMock = jest.fn(
 );
 
 const permissionsServiceValidateAccessMock = jest.fn(() => true);
+
+const resourceServiceCreateDefaultAuthEntityMock = jest.fn(
+  () => EXAMPLE_ENTITY
+);
+const resourceServiceGetAuthEntityNameMock = jest.fn(() => USER_ENTITY_NAME);
 
 describe("AssistantFunctionsService", () => {
   let service: AssistantFunctionsService;
@@ -184,14 +216,18 @@ describe("AssistantFunctionsService", () => {
             createFieldByDisplayName: entityServiceCreateFieldByDisplayNameMock,
             entities: entityServiceEntitiesMock,
             entity: entityServiceEntityMock,
+            getFields: jest.fn(() => []),
           },
         },
         {
           provide: ResourceService,
           useValue: {
+            resource: resourceServiceResourceMock,
             resources: resourceServiceResourcesMock,
             createServiceWithDefaultSettings:
               resourceServiceCreateServiceWithDefaultSettingsMock,
+            getAuthEntityName: resourceServiceGetAuthEntityNameMock,
+            createDefaultAuthEntity: resourceServiceCreateDefaultAuthEntityMock,
           },
         },
         {
@@ -397,7 +433,9 @@ describe("AssistantFunctionsService", () => {
     ],
     [
       EnumAssistantFunctions.GetPlugins,
-      {},
+      {
+        codeGenerator: EnumCodeGenerator.NodeJs,
+      },
       [
         {
           mock: pluginCatalogServiceGetPluginsMock,
@@ -656,5 +694,78 @@ describe("AssistantFunctionsService", () => {
       callId: EXAMPLE_CALL_ID,
       results: expect.stringContaining("Invalid arguments:"),
     });
+  });
+
+  it("should create auth entity when installing an auth plugin", async () => {
+    resourceServiceGetAuthEntityNameMock.mockReturnValueOnce(null);
+
+    pluginCatalogServiceGetPluginWithLatestVersionMock.mockReturnValueOnce({
+      ...EXAMPLE_PLUGIN,
+      versions: [
+        {
+          ...EXAMPLE_PLUGIN.versions[0],
+          configurations: {
+            [REQUIRES_AUTHENTICATION_ENTITY]: "true",
+          },
+        },
+      ],
+    });
+
+    await service.installMultiplePlugins(
+      ["plugin1", "plugin2", "plugin3"],
+      EXAMPLE_RESOURCE_ID,
+      EXAMPLE_ASSISTANT_CONTEXT
+    );
+
+    expect(resourceServiceGetAuthEntityNameMock).toHaveBeenCalledTimes(1);
+    expect(resourceServiceCreateDefaultAuthEntityMock).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["User", "Users", "user", "users"])(
+    "should create the default auth entity when creating an entity with the name %s",
+    async (name) => {
+      const functionName = EnumAssistantFunctions.CreateEntities;
+      const params = {
+        names: [name],
+        serviceId: EXAMPLE_RESOURCE_ID,
+      };
+
+      await service.executeFunction(
+        EXAMPLE_CALL_ID,
+        functionName,
+        JSON.stringify(params),
+        EXAMPLE_ASSISTANT_CONTEXT,
+        EXAMPLE_LOGGER_CONTEXT
+      );
+
+      expect(resourceServiceCreateDefaultAuthEntityMock).toHaveBeenCalledTimes(
+        1
+      );
+      expect(entityServiceCreateOneEntityMock).toHaveBeenCalledTimes(0);
+    }
+  );
+
+  it("should create the regular entity in case the default auth entity already exist when creating an entity with the name user", async () => {
+    const functionName = EnumAssistantFunctions.CreateEntities;
+    const params = {
+      names: ["User"],
+      serviceId: EXAMPLE_RESOURCE_ID,
+    };
+
+    //throw error from createDefaultAuthEntity
+    resourceServiceCreateDefaultAuthEntityMock.mockImplementationOnce(() => {
+      throw new AmplicationError("Error");
+    });
+
+    await service.executeFunction(
+      EXAMPLE_CALL_ID,
+      functionName,
+      JSON.stringify(params),
+      EXAMPLE_ASSISTANT_CONTEXT,
+      EXAMPLE_LOGGER_CONTEXT
+    );
+
+    expect(resourceServiceCreateDefaultAuthEntityMock).toHaveBeenCalledTimes(1);
+    expect(entityServiceCreateOneEntityMock).toHaveBeenCalledTimes(1);
   });
 });

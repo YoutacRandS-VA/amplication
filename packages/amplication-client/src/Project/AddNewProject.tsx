@@ -10,7 +10,11 @@ import { Button } from "../Components/Button";
 
 const CLASS_NAME = "add-new-project";
 
-const AddNewProject = () => {
+type Props = {
+  projectsLength: number;
+};
+
+const AddNewProject = ({ projectsLength }: Props) => {
   const [projectDialogStatus, setProjectDialogStatus] =
     useState<boolean>(false);
 
@@ -35,7 +39,9 @@ const AddNewProject = () => {
       <FeatureIndicatorContainer
         featureId={BillingFeature.Projects}
         entitlementType={EntitlementType.Metered}
-        limitationText="The workspace reached your plan's project limitation. "
+        limitationText="You have reached the maximum number of projects allowed. "
+        actualUsage={projectsLength}
+        paidPlansExclusive={false}
       >
         <Button
           onClick={handleNewProjectClick}

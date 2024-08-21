@@ -32,6 +32,7 @@ import { EnumSubscriptionStatus } from "../models";
 import Assistant from "../Assistant/Assistant";
 import ResponsiveContainer from "../Components/ResponsiveContainer";
 import { AssistantContextProvider } from "../Assistant/context/AssistantContext";
+import { OnboardingChecklistContextProvider } from "../OnboardingChecklist/context/OnboardingChecklistContext";
 
 const MobileMessage = lazy(() => import("../Layout/MobileMessage"));
 
@@ -107,6 +108,9 @@ const WorkspaceLayout: React.FC<Props> = ({
     createMessageBroker,
     errorCreateMessageBroker,
     loadingCreateMessageBroker,
+    createPluginRepository,
+    errorCreatePluginRepository,
+    loadingCreatePluginRepository,
     createServiceWithEntitiesResult,
     updateCodeGeneratorVersion,
     loadingUpdateCodeGeneratorVersion,
@@ -116,7 +120,9 @@ const WorkspaceLayout: React.FC<Props> = ({
   useEffect(() => {
     if (!currentProject?.id) return;
     commitUtils.refetchCommitsData(true);
-  }, [currentProject?.id]);
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentProject?.id]); //do not include commitUtils to avoid infinite loop
 
   const { trackEvent, Track } = useTracking<{ [key: string]: any }>({
     workspaceId: currentWorkspace?.id,
@@ -203,6 +209,9 @@ const WorkspaceLayout: React.FC<Props> = ({
         createMessageBroker,
         errorCreateMessageBroker,
         loadingCreateMessageBroker,
+        createPluginRepository,
+        errorCreatePluginRepository,
+        loadingCreatePluginRepository,
         resetPendingChangesIndicator,
         setResetPendingChangesIndicator,
         openHubSpotChat,
@@ -213,55 +222,57 @@ const WorkspaceLayout: React.FC<Props> = ({
         errorUpdateCodeGeneratorVersion,
       }}
     >
-      <AssistantContextProvider>
-        {isMobileOnly ? (
-          <MobileMessage />
-        ) : (
-          <StiggProvider
-            apiKey={REACT_APP_BILLING_API_KEY}
-            customerId={currentWorkspace.id}
-          >
-            <Track>
-              <div className={`${moduleClass}__assistant__wrapper`}>
-                {REACT_APP_FEATURE_AI_ASSISTANT_ENABLED === "true" && (
-                  <div className={`${moduleClass}__assistant`}>
-                    <Assistant />
+      <OnboardingChecklistContextProvider>
+        <AssistantContextProvider>
+          {isMobileOnly ? (
+            <MobileMessage />
+          ) : (
+            <StiggProvider
+              apiKey={REACT_APP_BILLING_API_KEY}
+              customerId={currentWorkspace.id}
+            >
+              <Track>
+                <div className={`${moduleClass}__assistant__wrapper`}>
+                  {REACT_APP_FEATURE_AI_ASSISTANT_ENABLED === "true" && (
+                    <div className={`${moduleClass}__assistant`}>
+                      <Assistant />
+                    </div>
+                  )}
+                  <div className={moduleClass}>
+                    <WorkspaceHeader />
+                    <CompleteInvitation />
+                    <RedeemCoupon />
+
+                    <div className={`${moduleClass}__page_content`}>
+                      <ResponsiveContainer
+                        className={`${moduleClass}__main_content`}
+                      >
+                        {innerRoutes}
+                      </ResponsiveContainer>
+
+                      {currentProject ? (
+                        <div className={`${moduleClass}__changes_menu`}>
+                          <PendingChanges projectId={currentProject.id} />
+                          {commitUtils.lastCommit && (
+                            <LastCommit lastCommit={commitUtils.lastCommit} />
+                          )}
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <WorkspaceFooter lastCommit={commitUtils.lastCommit} />
+                    <HubSpotChatComponent
+                      setChatStatus={setChatStatus}
+                      chatStatus={chatStatus}
+                    />
+                    <ScreenResolutionMessage />
                   </div>
-                )}
-                <div className={moduleClass}>
-                  <WorkspaceHeader />
-                  <CompleteInvitation />
-                  <RedeemCoupon />
-
-                  <div className={`${moduleClass}__page_content`}>
-                    <ResponsiveContainer
-                      className={`${moduleClass}__main_content`}
-                    >
-                      {innerRoutes}
-                    </ResponsiveContainer>
-
-                    {currentProject ? (
-                      <div className={`${moduleClass}__changes_menu`}>
-                        <PendingChanges projectId={currentProject.id} />
-                        {commitUtils.lastCommit && (
-                          <LastCommit lastCommit={commitUtils.lastCommit} />
-                        )}
-                      </div>
-                    ) : null}
-                  </div>
-
-                  <WorkspaceFooter lastCommit={commitUtils.lastCommit} />
-                  <HubSpotChatComponent
-                    setChatStatus={setChatStatus}
-                    chatStatus={chatStatus}
-                  />
-                  <ScreenResolutionMessage />
                 </div>
-              </div>
-            </Track>
-          </StiggProvider>
-        )}
-      </AssistantContextProvider>
+              </Track>
+            </StiggProvider>
+          )}
+        </AssistantContextProvider>
+      </OnboardingChecklistContextProvider>
     </AppContextProvider>
   ) : (
     <CircularProgress centerToParent />

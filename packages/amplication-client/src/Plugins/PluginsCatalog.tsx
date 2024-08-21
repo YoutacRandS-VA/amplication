@@ -1,9 +1,15 @@
 import { List, Snackbar, TabContentTitle } from "@amplication/ui/design-system";
 import { useMutation, useQuery } from "@apollo/client";
 import { keyBy } from "lodash";
-import React, { useCallback, useContext, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { match } from "react-router-dom";
-import { AppContext } from "../context/appContext";
+import { AppContext, useAppContext } from "../context/appContext";
 import { USER_ENTITY } from "../Entity/constants";
 import { GET_ENTITIES } from "../Entity/EntityList";
 import { TEntities } from "../Entity/NewEntity";
@@ -12,9 +18,15 @@ import useResource from "../Resource/hooks/useResource";
 import { AppRouteProps } from "../routes/routesUtil";
 import { formatError } from "../util/error";
 import { CREATE_DEFAULT_ENTITIES } from "../Workspaces/queries/entitiesQueries";
-import usePlugins, { Plugin, PluginVersion } from "./hooks/usePlugins";
+import usePlugins from "./hooks/usePlugins";
+import { Plugin, PluginVersion } from "./hooks/usePluginCatalog";
+
 import PluginInstallConfirmationDialog from "./PluginInstallConfirmationDialog";
 import PluginsCatalogItem from "./PluginsCatalogItem";
+import { useOnboardingChecklistContext } from "../OnboardingChecklist/context/OnboardingChecklistContext";
+import { useStiggContext } from "@stigg/react-sdk";
+import { BillingFeature } from "@amplication/util-billing-types";
+import { PRIVATE_PLUGINS_CATEGORY } from "./PluginTree";
 
 type Props = AppRouteProps & {
   match: match<{
@@ -45,6 +57,12 @@ const PluginsCatalog: React.FC<Props> = ({ match }: Props) => {
   const [isCreatePluginInstallation, setIsCreatePluginInstallation] =
     useState<boolean>(false);
 
+  const { stigg } = useStiggContext();
+
+  const { hasAccess: canUsePrivatePlugins } = stigg.getBooleanEntitlement({
+    featureId: BillingFeature.PrivatePlugins,
+  });
+
   const [pluginInstallationData, setPluginInstallationData] =
     useState<PluginInstallationData>(null);
 
@@ -59,6 +77,8 @@ const PluginsCatalog: React.FC<Props> = ({ match }: Props) => {
     },
   });
 
+  const { currentResource } = useAppContext();
+
   const {
     pluginInstallations,
     pluginCatalog,
@@ -66,11 +86,22 @@ const PluginsCatalog: React.FC<Props> = ({ match }: Props) => {
     createError,
     updatePluginInstallation,
     updateError,
+    privatePluginCatalog,
+    loadPrivatePluginsCatalog,
     // onPluginDropped,
-  } = usePlugins(resource);
+  } = usePlugins(resource, null, currentResource?.codeGenerator);
+
+  useEffect(() => {
+    if (canUsePrivatePlugins) {
+      loadPrivatePluginsCatalog();
+    }
+  }, [canUsePrivatePlugins, loadPrivatePluginsCatalog]);
 
   const filteredCatalog = useMemo(() => {
     if (category === "undefined") return Object.values(pluginCatalog);
+
+    if (category === PRIVATE_PLUGINS_CATEGORY)
+      return Object.values(privatePluginCatalog);
 
     return Object.values(pluginCatalog).reduce(
       (pluginsCatalogArr: Plugin[], plugin: Plugin) => {
@@ -81,9 +112,10 @@ const PluginsCatalog: React.FC<Props> = ({ match }: Props) => {
       },
       []
     );
-  }, [category, pluginCatalog]);
+  }, [category, pluginCatalog, privatePluginCatalog]);
 
   const { addEntity } = useContext(AppContext);
+  const { setOnboardingProps } = useOnboardingChecklistContext();
 
   const userEntity = useMemo(() => {
     const authEntity = resourceSettings?.serviceSettings?.authEntityName;
@@ -124,17 +156,25 @@ const PluginsCatalog: React.FC<Props> = ({ match }: Props) => {
             settings: settings,
             configurations: configurations,
             resource: { connect: { id: resource } },
+            isPrivate: category === PRIVATE_PLUGINS_CATEGORY,
           },
         },
-      }).catch(console.error);
+      })
+        .catch(console.error)
+        .then(() => {
+          setOnboardingProps({
+            pluginInstalled: true,
+          });
+        });
     },
     [
       createPluginInstallation,
       setConfirmInstall,
       resource,
       userEntity,
-      pluginInstallationData,
       setPluginInstallationData,
+      setOnboardingProps,
+      category,
     ]
   );
 
@@ -209,6 +249,7 @@ const PluginsCatalog: React.FC<Props> = ({ match }: Props) => {
                 settings: pluginVersion.settings,
                 configurations: pluginVersion.configurations,
                 resource: { connect: { id: resource } },
+                isPrivate: category === PRIVATE_PLUGINS_CATEGORY,
               },
             },
           }).catch(console.error);
@@ -241,12 +282,7 @@ const PluginsCatalog: React.FC<Props> = ({ match }: Props) => {
         },
       },
     }).catch(console.error);
-  }, [
-    createDefaultEntities,
-    resource,
-    pluginInstallationData,
-    setPluginInstallationData,
-  ]);
+  }, [createDefaultEntities, resource]);
 
   return (
     <div>

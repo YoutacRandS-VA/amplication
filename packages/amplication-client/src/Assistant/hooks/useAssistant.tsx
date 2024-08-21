@@ -12,6 +12,8 @@ import {
 import { useCallback, useState } from "react";
 import { useAppContext } from "../../context/appContext";
 import { GET_ENTITIES } from "../../Entity/EntityERD/EntitiesERD";
+import { commitPath } from "../../util/paths";
+import { useHistory } from "react-router-dom";
 
 type TAssistantThreadData = {
   sendAssistantMessageWithStream: models.AssistantThread;
@@ -123,12 +125,26 @@ const FUNCTIONS_CACHE_MAP: {
     refreshPendingChanges: false,
     cacheKey: "",
   },
+  [models.EnumAssistantFunctions.GetService]: {
+    refreshPendingChanges: false,
+    cacheKey: "",
+  },
 };
 
 const useAssistant = () => {
-  const { currentProject, currentResource, addBlock } = useAppContext();
+  const {
+    currentWorkspace,
+    currentProject,
+    currentResource,
+    resources,
+    addBlock,
+    commitUtils,
+  } = useAppContext();
+  const history = useHistory();
 
   const apolloClient = useApolloClient();
+
+  const [redirectToErd, setRedirectToErd] = useState(true);
 
   const updateCache = useCallback(
     (fieldName: string) => {
@@ -182,6 +198,32 @@ const useAssistant = () => {
             addBlock("blockId");
           }
 
+          if (
+            functionExecuted ===
+            models.EnumAssistantFunctions.CommitProjectPendingChanges
+          ) {
+            commitUtils.refetchCommitsData(true);
+            commitUtils.refetchLastCommit();
+
+            const path = commitPath(currentWorkspace?.id, currentProject?.id);
+            return history.push(path);
+          }
+
+          if (
+            functionExecuted === models.EnumAssistantFunctions.CreateEntities
+          ) {
+            if (redirectToErd) {
+              setRedirectToErd((currentValue) => {
+                //only once per session, move the user to the ERD view
+                const resourceId = currentResource?.id || resources[0]?.id;
+                const path = `/${currentWorkspace?.id}/${currentProject?.id}/${resourceId}/entities?view=erd`;
+                resourceId && history.push(path);
+
+                return false;
+              });
+            }
+          }
+
           const queries = FUNCTIONS_CACHE_MAP[functionExecuted].queries;
           if (queries) {
             apolloClient.refetchQueries({
@@ -205,8 +247,6 @@ const useAssistant = () => {
           if (lastMessage.id.startsWith(TEMP_MESSAGE_PREFIX)) {
             currentMessages.pop();
           }
-
-          setProcessingMessage(!message.completed);
 
           if (lastMessage.id === message.id) {
             lastMessage.text = message.snapshot;

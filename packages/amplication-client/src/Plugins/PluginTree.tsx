@@ -1,7 +1,6 @@
 import React, {
   useCallback,
   useContext,
-  useEffect,
   useLayoutEffect,
   useMemo,
   useState,
@@ -13,8 +12,12 @@ import "./PluginTree.scss";
 import usePlugins from "./hooks/usePlugins";
 import { Icon } from "@amplication/ui/design-system";
 import { Collapse, ListItem, ListItemText } from "@mui/material";
+import { useStiggContext } from "@stigg/react-sdk";
+import { BillingFeature } from "@amplication/util-billing-types";
 
 const CLASS_NAME = "plugin-tree";
+
+export const PRIVATE_PLUGINS_CATEGORY = "private-plugins";
 
 type Props = {
   resourceId: string;
@@ -24,11 +27,21 @@ type Props = {
 export const PluginTree = React.memo(
   ({ resourceId, selectFirst = false }: Props) => {
     const location = useLocation();
-    const [chevronIcon, setChevronIcon] = useState("close");
+    const [chevronIcon, setChevronIcon] = useState("open");
     const history = useHistory();
     const { currentWorkspace, currentProject, currentResource } =
       useContext(AppContext);
-    const { categories } = usePlugins(currentResource.id);
+    const { categories } = usePlugins(
+      currentResource.id,
+      null,
+      currentResource?.codeGenerator
+    );
+
+    const { stigg } = useStiggContext();
+
+    const { hasAccess: canUsePrivatePlugins } = stigg.getBooleanEntitlement({
+      featureId: BillingFeature.PrivatePlugins,
+    });
 
     useLayoutEffect(() => {
       const urlArr = location.pathname.split("/");
@@ -40,12 +53,6 @@ export const PluginTree = React.memo(
     const handleCategoriesClick = useCallback(() => {
       setChevronIcon(chevronIcon === "close" ? "open" : "close");
     }, [chevronIcon]);
-
-    useEffect(() => {
-      setChevronIcon(
-        /catalog\/|!installed/.test(location.pathname) ? "open" : "close"
-      );
-    }, [location.pathname]);
 
     const setCategoriesLinks = useMemo(() => {
       return categories.map((category) => (
@@ -71,6 +78,14 @@ export const PluginTree = React.memo(
           >
             <span>All Plugins</span>
           </InnerTabLink>
+          {canUsePrivatePlugins && (
+            <InnerTabLink
+              icon="plugins"
+              to={`/${currentWorkspace?.id}/${currentProject?.id}/${resourceId}/plugins/catalog/${PRIVATE_PLUGINS_CATEGORY}`}
+            >
+              <span>Private Plugins</span>
+            </InnerTabLink>
+          )}
           <InnerTabLink
             icon="plugins"
             to={`/${currentWorkspace?.id}/${currentProject?.id}/${resourceId}/plugins/installed`}

@@ -170,20 +170,22 @@ export class ModuleService extends BlockTypeService<
       }
     }
 
-    this.validateModuleName(args.data.name);
+    if (args.data.name !== undefined) {
+      this.validateModuleName(args.data.name);
 
-    const otherModule = await this.findModuleByName(
-      args.data.name,
-      existingModule.resourceId
-    );
-
-    if (
-      otherModule.length > 0 &&
-      otherModule.filter((module) => module.id !== args.where.id).length > 0
-    ) {
-      throw new AmplicationError(
-        `Module with name ${args.data.name} already exists in resource ${existingModule.resourceId}`
+      const otherModule = await this.findModuleByName(
+        args.data.name,
+        existingModule.resourceId
       );
+
+      if (
+        otherModule.length > 0 &&
+        otherModule.filter((module) => module.id !== args.where.id).length > 0
+      ) {
+        throw new AmplicationError(
+          `Module with name ${args.data.name} already exists in resource ${existingModule.resourceId}`
+        );
+      }
     }
 
     const subscription = await this.billingService.getSubscription(
@@ -192,9 +194,12 @@ export class ModuleService extends BlockTypeService<
 
     await this.analytics.trackWithContext({
       properties: {
-        name: args.data.name,
+        name: args.data.name ? args.data.name : existingModule.name,
         planType: subscription.subscriptionPlan,
-        operation: "rename",
+        operation:
+          args.data.enabled !== undefined
+            ? `toggle changed to: ${args.data.enabled}`
+            : "meta data updated",
       },
       event: EnumEventType.InteractModule,
     });
@@ -392,14 +397,13 @@ export class ModuleService extends BlockTypeService<
     const allOtherResourceCustomModuleDtos = allResourceModuleDtos.filter(
       (moduleDto) =>
         moduleDto.parentBlockId !== moduleId &&
-        (moduleDto.dtoType === EnumModuleDtoType.Custom ||
-          moduleDto.dtoType === EnumModuleDtoType.CustomEnum)
+        moduleDto.dtoType === EnumModuleDtoType.Custom
     );
 
     allOtherResourceCustomModuleDtos.forEach((moduleDto) => {
-      moduleDto.properties.forEach((prop) => {
+      moduleDto.properties?.forEach((prop) => {
         if (prop) {
-          prop.propertyTypes.forEach((propType) => {
+          prop.propertyTypes?.forEach((propType) => {
             const currentDto = moduleModuleDtos.find(
               (x) => x.id === propType.dtoId
             );

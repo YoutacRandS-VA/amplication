@@ -40,6 +40,7 @@ const SUBSCRIPTION_TO_CHIP_STYLE: {
   [EnumSubscriptionPlan.Pro]: EnumChipStyle.ThemeBlue,
   [EnumSubscriptionPlan.Enterprise]: EnumChipStyle.ThemeGreen,
   [EnumSubscriptionPlan.PreviewBreakTheMonolith]: EnumChipStyle.ThemeOrange,
+  [EnumSubscriptionPlan.Essential]: EnumChipStyle.ThemeBlue,
 };
 
 export const WorkspaceOverview = () => {
@@ -64,7 +65,7 @@ export const WorkspaceOverview = () => {
       <FlexItem
         itemsAlign={EnumItemsAlign.Center}
         start={<TabContentTitle title="Workspace" />}
-        end={<AddNewProject />}
+        end={<AddNewProject projectsLength={projectsList.length} />}
         margin={EnumFlexItemMargin.None}
       />
       <HorizontalRule doubleSpacing />
